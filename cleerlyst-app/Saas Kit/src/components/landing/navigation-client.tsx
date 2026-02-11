@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils"
 import { Menu, X, Zap } from "lucide-react"
 import { SignInButton } from "@/components/auth/signin-button"
 import { UserButtonClient } from "@/components/auth/user-button-client"
-import { CreditsDisplay } from "@/components/credits/credits-display"
 
 interface NavigationClientProps {
   session: any
@@ -19,7 +18,6 @@ export function NavigationClient({ session }: NavigationClientProps) {
 
   const navItems = [
     { name: "Features", href: "#features" },
-    { name: "Pricing", href: "#pricing" },
     { name: "Testimonials", href: "#testimonials" },
     { name: "Documentation", href: "/docs" },
     { name: "Contact", href: "/contact" },
@@ -34,7 +32,7 @@ export function NavigationClient({ session }: NavigationClientProps) {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
               <Zap className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">Best SAAS Kit</span>
+            <span className="text-xl font-bold">Cleerlyst</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -64,7 +62,6 @@ export function NavigationClient({ session }: NavigationClientProps) {
               </>
             ) : (
               <>
-                <CreditsDisplay />
                 <Button variant="ghost" asChild>
                   <Link href="/dashboard">Dashboard</Link>
                 </Button>
