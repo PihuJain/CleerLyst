@@ -111,12 +111,19 @@ export async function GET(request: NextRequest) {
       }
 
       // ----- 4. Fetch published dataset metadata -----
+      //
+      // LIFECYCLE RULE: Only status = 'published' datasets appear in the feed.
+      // Draft and revoked datasets are never returned to students.
+      // The underlying query (getPublishedDatasetsForInstitute) enforces:
+      //   WHERE status = 'published' AND (expires_at IS NULL OR expires_at > NOW())
+      // No status values are leaked in the response.
 
       const datasets = await getPublishedDatasetsForInstitute(instituteId);
 
       // ----- 5. Map to response shape -----
       // Rename `id` → `dataset_id`. Serialise dates as ISO strings.
       // No extra fields. No institute_id. No internal status.
+      // Status is NEVER included — students cannot infer lifecycle state.
 
       const feed: FeedItem[] = datasets.map((d) => ({
         dataset_id: d.id,

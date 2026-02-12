@@ -67,7 +67,39 @@ export async function POST(
         );
       }
 
-      // ----- 3. Publish (transactional: status update + audit log) -----
+      // ----- 3. LIFECYCLE CHECK: must be draft -----
+
+      if (dataset.status !== "draft") {
+        logWarn("dataset.publish.wrong_status", {
+          datasetId,
+          status: dataset.status,
+        });
+        return NextResponse.json(
+          { error: "Only draft datasets can be published" },
+          { status: 400 },
+        );
+      }
+
+      // ----- 4. PRECONDITION: visibility_config.allowed_fields must be non-empty -----
+
+      const visConfig = dataset.visibility_config as {
+        allowed_fields?: string[];
+      } | null;
+
+      const allowedFields = visConfig?.allowed_fields;
+
+      if (
+        !Array.isArray(allowedFields) ||
+        allowedFields.length === 0
+      ) {
+        logWarn("dataset.publish.no_visible_fields", { datasetId });
+        return NextResponse.json(
+          { error: "no_visible_fields_selected" },
+          { status: 400 },
+        );
+      }
+
+      // ----- 5. Publish (transactional: status update + audit log) -----
 
       let result: { id: string; title: string; published_at: Date };
       try {
@@ -78,9 +110,12 @@ export async function POST(
         return NextResponse.json({ error: message }, { status: 400 });
       }
 
-      // ----- 4. Build response -----
+      // ----- 6. Build response -----
 
-      logInfo("dataset.publish.success", { datasetId });
+      logInfo("dataset.publish.success", {
+        datasetId,
+        allowedFieldsCount: allowedFields.length,
+      });
 
       return NextResponse.json({
         success: true,

@@ -202,6 +202,36 @@ export async function getUserIdentifierHashes(
 }
 
 // ---------------------------------------------------------------------------
+// User identifier deletion — scoped to (user_id, type), no wildcards
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete a user identifier by (user_id, type).
+ *
+ * SECURITY INVARIANTS:
+ *   • Both user_id AND type are required in the WHERE clause — no wildcard deletes.
+ *   • Does NOT return identifier_hash or any sensitive data.
+ *   • Returns true if a row was deleted, false if no matching row existed.
+ */
+export async function deleteUserIdentifier(
+  userId: string,
+  type: string,
+): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `DELETE FROM user_identifiers
+        WHERE user_id = $1
+          AND type = $2`,
+      [userId, type],
+    );
+    return (result.rowCount ?? 0) > 0;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dataset record lookup — identity-bound, NO join to users
 // ---------------------------------------------------------------------------
 
@@ -515,6 +545,41 @@ export async function revokeDataset(
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dataset visibility config update — draft-only
+// ---------------------------------------------------------------------------
+
+/**
+ * Update the visibility_config for a dataset.
+ *
+ * SECURITY INVARIANTS:
+ *   • Caller must verify dataset is in 'draft' status BEFORE calling.
+ *   • Explicit column selection — no SELECT *.
+ *   • Does NOT return visibility_config contents.
+ *   • Does NOT modify status or any other column.
+ */
+export async function updateDatasetVisibilityConfig(
+  datasetId: string,
+  visibilityConfig: { allowed_fields: string[] },
+): Promise<{ id: string; updated_at: Date }> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{ id: string; updated_at: Date }>(
+      `UPDATE datasets
+          SET visibility_config = $2::jsonb
+        WHERE id = $1
+        RETURNING id, created_at AS updated_at`,
+      [datasetId, JSON.stringify(visibilityConfig)],
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Dataset not found");
+    }
+    return result.rows[0] as { id: string; updated_at: Date };
   } finally {
     client.release();
   }
@@ -837,6 +902,77 @@ export async function createDataset(
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// User identifier insertion — identity-bound, no plaintext
+// ---------------------------------------------------------------------------
+
+/**
+ * Insert a hashed + encrypted identifier for a user.
+ *
+ * SECURITY INVARIANTS:
+ *   • No plaintext identifier stored — only hash and encrypted blob.
+ *   • identifier_hash is used for matching (one-way, non-reversible).
+ *   • identifier_encrypted is AES-256-GCM ciphertext (recoverable with key).
+ *   • Columns listed explicitly — no SELECT *.
+ *   • Does NOT return identifier_hash or identifier_encrypted.
+ *   • Caller must pre-check (user_id, type) uniqueness.
+ *
+ * @throws If identifier_hash already exists (UNIQUE violation).
+ */
+export async function insertUserIdentifier(
+  userId: string,
+  type: string,
+  identifierHash: string,
+  identifierEncrypted: Buffer,
+): Promise<{ id: string; created_at: Date }> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{ id: string; created_at: Date }>(
+      `INSERT INTO user_identifiers (user_id, type, identifier_hash, identifier_encrypted)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, created_at`,
+      [userId, type, identifierHash, identifierEncrypted],
+    );
+    return result.rows[0] as { id: string; created_at: Date };
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// User identifier retrieval — encrypted only, no hash, no plaintext
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all encrypted identifiers for a user.
+ *
+ * SECURITY INVARIANTS:
+ *   • Returns type + identifier_encrypted ONLY — never identifier_hash.
+ *   • Decryption is the caller's responsibility (server-side only).
+ *   • Explicit column selection — no SELECT *.
+ *   • Scoped to a single user_id — no cross-user reads.
+ */
+export async function getUserEncryptedIdentifiers(
+  userId: string,
+): Promise<Array<{ type: string; identifier_encrypted: Buffer }>> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      type: string;
+      identifier_encrypted: Buffer;
+    }>(
+      `SELECT type, identifier_encrypted
+         FROM user_identifiers
+        WHERE user_id = $1
+        ORDER BY type`,
+      [userId],
+    );
+    return result.rows;
   } finally {
     client.release();
   }

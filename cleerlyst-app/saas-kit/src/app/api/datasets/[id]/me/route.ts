@@ -16,14 +16,37 @@ import { rateLimiter } from "@/lib/rate-limiter";
 export const runtime = "nodejs";
 
 // ---------------------------------------------------------------------------
-// Uniform response helpers
+// Response helpers
 //
-// SECURITY (Test 2.3 — Response Uniformity):
-//   Both match and no-match return HTTP 200 with identical shape.
-//   An attacker comparing responses cannot distinguish the two.
+// LIFECYCLE + SECURITY INVARIANTS:
+//
+//   DATASET_NOT_FOUND (404):
+//     Returned when the dataset does not exist, is not published, belongs to
+//     another institute, or has expired. A student cannot infer whether the
+//     dataset was draft, revoked, or never existed — uniform ambiguity.
+//
+//   NOT_MATCHED (200):
+//     Returned ONLY for published, accessible datasets when the user's
+//     identifier does not match any record.
+//
+//   matched (200):
+//     Returned when a record match is found. Only visibility-filtered fields.
+//
 // ---------------------------------------------------------------------------
 
+const DATASET_NOT_FOUND = NextResponse.json(
+  { error: "Not found" },
+  { status: 404 },
+);
+
 const NOT_MATCHED = NextResponse.json({ matched: false }, { status: 200 });
+
+function missingIdentifier(requiredType: string) {
+  return NextResponse.json(
+    { matched: false, reason: "missing_identifier", required_type: requiredType },
+    { status: 200 },
+  );
+}
 
 function matched(data: Record<string, unknown>) {
   return NextResponse.json({ matched: true, data }, { status: 200 });
@@ -45,10 +68,15 @@ function matched(data: Record<string, unknown>) {
 //     and query params are NEVER used to supply an identifier.
 //     A student cannot query as another student.
 //
-//   Test 2.3 — Non-Match Response Uniformity
-//     Every non-auth exit path returns the same { matched: false } with
-//     HTTP 200. Match returns { matched: true, data } with HTTP 200.
-//     Same status. Same shape. No inference possible.
+//   Test 2.3 — Response Uniformity & Lifecycle Enforcement
+//     Non-existent / draft / revoked / wrong-institute / expired datasets
+//     all return 404 { error: "Not found" } — uniform ambiguity.
+//     Published-but-no-match returns 200 { matched: false }.
+//     When a non-email identifier is required but the user has not yet
+//     registered it, the response includes reason: "missing_identifier"
+//     and required_type — this reveals only the dataset's identifier_type
+//     (already visible as published metadata), NOT record existence.
+//     Match returns { matched: true, data } with HTTP 200.
 //
 //   Test 2.4 — No Join Path
 //     The code performs two SEPARATE queries:
@@ -95,27 +123,26 @@ export async function GET(
         return NextResponse.json({ matched: false }, { status: 429 });
       }
 
-      // ----- 2. Load dataset -----
-      // If the dataset doesn't exist, is not published, belongs to another
-      // institute, or has expired → return the uniform NOT_MATCHED response.
-      // We deliberately do NOT return 404 — that would leak dataset existence.
+      // ----- 2. Load dataset + enforce lifecycle -----
+      //
+      // LIFECYCLE RULE: Only published datasets are accessible to students.
+      // If the dataset does not exist, is draft, is revoked, belongs to
+      // another institute, or has expired → return DATASET_NOT_FOUND (404).
+      // The uniform 404 ensures a student cannot infer whether the dataset
+      // was draft, revoked, or never existed (uniform ambiguity).
 
       const dataset = await getDatasetById(datasetId);
 
-      if (!dataset) {
-        return NOT_MATCHED;
+      if (!dataset || dataset.status !== "published") {
+        return DATASET_NOT_FOUND;
       }
 
       if (dataset.institute_id !== userInstituteId) {
-        return NOT_MATCHED;
-      }
-
-      if (dataset.status !== "published") {
-        return NOT_MATCHED;
+        return DATASET_NOT_FOUND;
       }
 
       if (dataset.expires_at && new Date(dataset.expires_at) < new Date()) {
-        return NOT_MATCHED;
+        return DATASET_NOT_FOUND;
       }
 
       // ----- 3. Collect the logged-in user's identifier hashes -----
@@ -123,6 +150,10 @@ export async function GET(
       //
       // Query 1 (users / user_identifiers) — completely separate from
       // Query 2 (dataset_records). No join.
+      //
+      // If the dataset requires a non-email identifier that the user has
+      // not yet registered, return a specific "missing_identifier" reason
+      // so the client can prompt the user to add it.
 
       const hashes: string[] = [];
 
@@ -143,6 +174,13 @@ export async function GET(
       }
 
       if (hashes.length === 0) {
+        // For non-email identifier types, the user simply hasn't registered
+        // the required identifier yet. Surface this explicitly so the client
+        // can prompt them — this does NOT reveal record existence.
+        if (dataset.identifier_type !== "email") {
+          return missingIdentifier(dataset.identifier_type);
+        }
+
         return NOT_MATCHED;
       }
 
@@ -157,6 +195,11 @@ export async function GET(
       }
 
       // ----- 5. Decrypt + apply visibility filter -----
+      //
+      // SECURITY: Never return the full decrypted object.
+      // Only return fields explicitly listed in visibility_config.allowed_fields.
+      // ALWAYS exclude the identifier column (identifier_type) — even if it
+      // somehow appears in allowed_fields (defense in depth).
 
       let decrypted: Record<string, unknown>;
       try {
@@ -168,27 +211,30 @@ export async function GET(
         return NOT_MATCHED;
       }
 
-      // Apply allowed_fields from visibility_config
       const visConfig = dataset.visibility_config as {
         allowed_fields?: string[];
       } | null;
 
       const allowedFields = visConfig?.allowed_fields;
 
-      let filteredData: Record<string, unknown>;
+      // Build filtered response — never return full decrypted object
+      const filteredData: Record<string, unknown> = {};
 
       if (Array.isArray(allowedFields) && allowedFields.length > 0) {
-        // Only expose the fields the admin explicitly allowed
-        filteredData = {};
+        const identifierColumn = dataset.identifier_type;
+
         for (const field of allowedFields) {
+          // SECURITY: Never return the identifier column
+          if (field === identifierColumn) continue;
+
           if (field in decrypted) {
             filteredData[field] = decrypted[field];
           }
         }
-      } else {
-        // No field restriction configured → return full decrypted payload
-        filteredData = decrypted;
       }
+      // If allowed_fields is empty or not configured → return empty data object.
+      // Published datasets MUST have allowed_fields configured (enforced at
+      // publish time), but we defend against misconfigured legacy data.
 
       // ----- 6. Audit log (action only, never payload) -----
 
