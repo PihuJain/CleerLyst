@@ -80,7 +80,22 @@ export async function POST(
         );
       }
 
-      // ----- 4. PRECONDITION: visibility_config.allowed_fields must be non-empty -----
+      // ----- 4. PRECONDITION: headers must be non-empty (records uploaded) -----
+      //
+      // If headers is empty, no upload has occurred.
+      // Publishing a dataset with zero records is forbidden.
+
+      const headers = Array.isArray(dataset.headers) ? dataset.headers as string[] : [];
+
+      if (headers.length === 0) {
+        logWarn("dataset.publish.no_records_uploaded", { datasetId });
+        return NextResponse.json(
+          { error: "no_records_uploaded" },
+          { status: 400 },
+        );
+      }
+
+      // ----- 5. PRECONDITION: visibility_config.allowed_fields must be non-empty -----
 
       const visConfig = dataset.visibility_config as {
         allowed_fields?: string[];
@@ -99,7 +114,7 @@ export async function POST(
         );
       }
 
-      // ----- 5. Publish (transactional: status update + audit log) -----
+      // ----- 6. Publish (transactional: status update + audit log) -----
 
       let result: { id: string; title: string; published_at: Date };
       try {
@@ -110,7 +125,7 @@ export async function POST(
         return NextResponse.json({ error: message }, { status: 400 });
       }
 
-      // ----- 6. Build response -----
+      // ----- 7. Build response -----
 
       logInfo("dataset.publish.success", {
         datasetId,
