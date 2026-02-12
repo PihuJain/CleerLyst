@@ -45,6 +45,7 @@ import {
   Upload,
   FileSpreadsheet,
   Loader2,
+  Eye,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,8 @@ interface DatasetRow {
   title: string;
   type: string;
   status: string;
+  has_headers: boolean;
+  has_visibility: boolean;
   created_at: string;
   published_at: string | null;
 }
@@ -308,8 +311,8 @@ export function AdminDatasetListClient({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Upload button — available for draft datasets */}
-                        {d.status === "draft" && (
+                        {/* Upload button — available for draft datasets without headers */}
+                        {d.status === "draft" && !d.has_headers && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -322,13 +325,38 @@ export function AdminDatasetListClient({
                           </Button>
                         )}
 
-                        {/* Publish button */}
+                        {/* Visibility button — available when headers exist */}
+                        {d.has_headers && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                          >
+                            <Link href={`/admin/datasets/${d.id}/visibility`}>
+                              <Eye className="mr-1.5 h-3.5 w-3.5" />
+                              Visibility
+                            </Link>
+                          </Button>
+                        )}
+
+                        {/* Publish button — requires headers + visibility */}
                         {d.status === "draft" && (
                           <Button
                             variant="default"
                             size="sm"
-                            disabled={actionLoading === d.id}
+                            disabled={
+                              actionLoading === d.id ||
+                              !d.has_headers ||
+                              !d.has_visibility
+                            }
                             onClick={() => handlePublish(d.id)}
+                            title={
+                              !d.has_headers
+                                ? "Upload records first"
+                                : !d.has_visibility
+                                  ? "Configure visibility first"
+                                  : "Publish dataset"
+                            }
                           >
                             {actionLoading === d.id ? (
                               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
