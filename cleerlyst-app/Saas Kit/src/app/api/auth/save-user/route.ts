@@ -1,47 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { upsertUser } from '@/lib/database';
+import { NextResponse } from "next/server";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
-  try {
-    // Check authentication
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Save user to database
-    const userData = {
-      google_id: session.user.id,
-      email: session.user.email!,
-      name: session.user.name || undefined,
-      image_url: session.user.image || undefined,
-    };
-
-    const savedUser = await upsertUser(userData);
-
-    return NextResponse.json({ 
-      success: true, 
-      user: {
-        id: savedUser.id,
-        email: savedUser.email,
-        name: savedUser.name,
-        created_at: savedUser.created_at,
-        last_login: savedUser.last_login
-      }
-    });
-
-  } catch (error) {
-    console.error('Save user API error:', error);
-    
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+/**
+ * POST /api/auth/save-user
+ *
+ * DEPRECATED — User provisioning now happens inside the NextAuth signIn
+ * callback (src/lib/auth.ts). This endpoint is retained only to avoid
+ * breaking existing client calls; it returns a 410 Gone status.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        "This endpoint is deprecated. User provisioning is handled automatically during sign-in.",
+    },
+    { status: 410 },
+  );
 }

@@ -2,6 +2,7 @@ import { requireAdminAccess } from '@/lib/admin-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Settings, Database, CreditCard, Mail, Shield } from 'lucide-react';
+import { config } from '@/lib/config';
 
 export const runtime = 'nodejs';
 
@@ -37,7 +38,7 @@ export default async function AdminSettingsPage() {
             <div className="flex justify-between items-center">
               <span>Environment:</span>
               <Badge variant="outline">
-                {process.env.NODE_ENV || 'development'}
+                {config.nodeEnv}
               </Badge>
             </div>
             <div className="flex justify-between items-center">
@@ -69,8 +70,8 @@ export default async function AdminSettingsPage() {
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center">
               <span>Database:</span>
-              <Badge variant={process.env.DATABASE_URL ? "default" : "destructive"}>
-                {process.env.DATABASE_URL ? 'Connected' : 'Not configured'}
+              <Badge variant={config.databaseUrl ? "default" : "destructive"}>
+                {config.databaseUrl ? 'Connected' : 'Not configured'}
               </Badge>
             </div>
           </CardContent>

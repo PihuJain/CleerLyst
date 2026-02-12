@@ -12,7 +12,8 @@ import {
   Home,
   Menu,
   X,
-  ArrowLeft
+  ArrowLeft,
+  FileSpreadsheet,
 } from "lucide-react"
 import { UserButtonClient } from "@/components/auth/user-button-client"
 
@@ -23,6 +24,7 @@ interface AdminClientProps {
 
 const sidebarItems = [
   { name: "Admin Dashboard", href: "/admin", icon: Shield },
+  { name: "Datasets", href: "/admin/datasets", icon: FileSpreadsheet },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ]
 
@@ -141,7 +143,7 @@ export function AdminClient({ children, adminUser }: AdminClientProps) {
               <div>
                 <h1 className="text-lg font-semibold">Admin Dashboard</h1>
                 <p className="text-sm text-muted-foreground">
-                  Logged in as: {adminUser.email}
+                  Logged in as: {adminUser.name || "Admin"}
                 </p>
               </div>
             </div>

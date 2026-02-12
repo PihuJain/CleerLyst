@@ -1,168 +1,105 @@
 -- ============================================================================
--- BEST SAAS KIT V2 - DATABASE SETUP VERIFICATION
+-- CLEERLYST — VERIFY DATABASE SETUP
 -- ============================================================================
--- This file verifies that your database setup is complete and working correctly
--- Run this file after executing all previous SQL files
+-- Checks that all Cleerlyst tables exist and the schema is correct.
+-- Run after 00-complete-setup.sql or after running all migrations.
+-- ============================================================================
 
--- Check if users table exists and has correct structure
 DO $$
 DECLARE
-    table_exists BOOLEAN;
-    column_count INTEGER;
+    tbl   TEXT;
+    found BOOLEAN;
+    ok    BOOLEAN := TRUE;
+    expected_tables TEXT[] := ARRAY[
+        'institutes',
+        'users',
+        'user_identifiers',
+        'datasets',
+        'dataset_records',
+        'notifications',
+        'audit_logs'
+    ];
 BEGIN
-    -- Check if users table exists
-    SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'users'
-    ) INTO table_exists;
-    
-    IF table_exists THEN
-        RAISE NOTICE '✅ Users table exists';
-        
-        -- Count columns
-        SELECT COUNT(*) INTO column_count
-        FROM information_schema.columns 
-        WHERE table_name = 'users' AND table_schema = 'public';
-        
-        RAISE NOTICE '📊 Users table has % columns', column_count;
+    RAISE NOTICE '';
+    RAISE NOTICE 'CLEERLYST — SCHEMA VERIFICATION';
+    RAISE NOTICE '================================';
+    RAISE NOTICE '';
+
+    -- Check each expected table
+    FOREACH tbl IN ARRAY expected_tables LOOP
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = tbl
+        ) INTO found;
+
+        IF found THEN
+            RAISE NOTICE '[OK]    %', tbl;
+        ELSE
+            RAISE NOTICE '[MISS]  %', tbl;
+            ok := FALSE;
+        END IF;
+    END LOOP;
+
+    RAISE NOTICE '';
+
+    -- Verify users table has NO plaintext email column
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'email'
+    ) THEN
+        RAISE NOTICE '[FAIL]  users table still has a plaintext "email" column!';
+        ok := FALSE;
     ELSE
-        RAISE NOTICE '❌ Users table does not exist!';
-        RAISE NOTICE '➡️  Please run 01-create-users-table.sql first';
+        RAISE NOTICE '[OK]    users table has NO plaintext email column';
     END IF;
-END $$;
 
--- Verify indexes exist
-DO $$
-DECLARE
-    index_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO index_count
-    FROM pg_indexes 
-    WHERE tablename = 'users' AND schemaname = 'public';
-    
-    RAISE NOTICE '🔍 Found % indexes on users table', index_count;
-    
-    IF index_count >= 8 THEN
-        RAISE NOTICE '✅ Indexes are properly created';
+    -- Verify users table has email_hash
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'email_hash'
+    ) THEN
+        RAISE NOTICE '[OK]    users.email_hash exists';
     ELSE
-        RAISE NOTICE '⚠️  Some indexes may be missing';
-        RAISE NOTICE '➡️  Please run 02-create-indexes.sql';
+        RAISE NOTICE '[FAIL]  users.email_hash is missing!';
+        ok := FALSE;
     END IF;
-END $$;
 
--- Verify functions exist
-DO $$
-DECLARE
-    function_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO function_count
-    FROM pg_proc p
-    JOIN pg_namespace n ON p.pronamespace = n.oid
-    WHERE n.nspname = 'public' 
-    AND p.proname IN (
-        'update_updated_at_column',
-        'get_user_stats',
-        'get_revenue_stats',
-        'add_user_credits',
-        'deduct_user_credits',
-        'upgrade_user_to_pro'
-    );
-    
-    RAISE NOTICE '⚙️  Found % custom functions', function_count;
-    
-    IF function_count >= 6 THEN
-        RAISE NOTICE '✅ All functions are created';
+    -- Verify dataset_records has NO user_id FK
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'dataset_records'
+          AND column_name = 'user_id'
+    ) THEN
+        RAISE NOTICE '[FAIL]  dataset_records has a user_id column (forbidden)!';
+        ok := FALSE;
     ELSE
-        RAISE NOTICE '⚠️  Some functions may be missing';
-        RAISE NOTICE '➡️  Please run 03-create-functions.sql';
+        RAISE NOTICE '[OK]    dataset_records has NO user_id column';
     END IF;
-END $$;
 
--- Verify triggers exist
-DO $$
-DECLARE
-    trigger_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO trigger_count
-    FROM information_schema.triggers
-    WHERE event_object_table = 'users'
-    AND trigger_schema = 'public';
-    
-    RAISE NOTICE '⚡ Found % triggers on users table', trigger_count;
-    
-    IF trigger_count >= 1 THEN
-        RAISE NOTICE '✅ Triggers are properly created';
+    -- Verify identifier_hash index on dataset_records
+    IF EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename  = 'dataset_records'
+          AND indexname   = 'idx_dataset_records_identifier_hash'
+    ) THEN
+        RAISE NOTICE '[OK]    idx_dataset_records_identifier_hash exists';
     ELSE
-        RAISE NOTICE '⚠️  Triggers may be missing';
-        RAISE NOTICE '➡️  Please run 03-create-functions.sql';
+        RAISE NOTICE '[WARN]  idx_dataset_records_identifier_hash missing';
     END IF;
-END $$;
 
--- Test database functions
-DO $$
-DECLARE
-    stats_result RECORD;
-    revenue_result RECORD;
-BEGIN
     RAISE NOTICE '';
-    RAISE NOTICE '🧪 Testing database functions...';
-    
-    -- Test get_user_stats function
-    BEGIN
-        SELECT * INTO stats_result FROM get_user_stats() LIMIT 1;
-        RAISE NOTICE '✅ get_user_stats() function works correctly';
-    EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE '❌ get_user_stats() function failed: %', SQLERRM;
-    END;
-    
-    -- Test get_revenue_stats function
-    BEGIN
-        SELECT * INTO revenue_result FROM get_revenue_stats() LIMIT 1;
-        RAISE NOTICE '✅ get_revenue_stats() function works correctly';
-    EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE '❌ get_revenue_stats() function failed: %', SQLERRM;
-    END;
-END $$;
 
--- Display current database statistics
-DO $$
-DECLARE
-    user_count INTEGER;
-    free_count INTEGER;
-    pro_count INTEGER;
-    total_credits INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO user_count FROM users;
-    SELECT COUNT(*) INTO free_count FROM users WHERE subscription_status = 'free';
-    SELECT COUNT(*) INTO pro_count FROM users WHERE subscription_status = 'pro';
-    SELECT COALESCE(SUM(credits), 0) INTO total_credits FROM users;
-    
-    RAISE NOTICE '';
-    RAISE NOTICE '📊 Current Database Statistics:';
-    RAISE NOTICE '   👥 Total Users: %', user_count;
-    RAISE NOTICE '   🆓 Free Users: %', free_count;
-    RAISE NOTICE '   💎 Pro Users: %', pro_count;
-    RAISE NOTICE '   🪙 Total Credits: %', total_credits;
-END $$;
+    IF ok THEN
+        RAISE NOTICE 'RESULT: ALL CHECKS PASSED';
+    ELSE
+        RAISE NOTICE 'RESULT: SOME CHECKS FAILED — review output above';
+    END IF;
 
--- Final verification summary
-DO $$
-BEGIN
     RAISE NOTICE '';
-    RAISE NOTICE '🎉 Database Setup Verification Complete!';
-    RAISE NOTICE '';
-    RAISE NOTICE '✅ What to do next:';
-    RAISE NOTICE '   1. Update your .env.local with the DATABASE_URL';
-    RAISE NOTICE '   2. Test your Next.js application connection';
-    RAISE NOTICE '   3. Try user authentication and registration';
-    RAISE NOTICE '   4. Test the credit system and subscriptions';
-    RAISE NOTICE '';
-    RAISE NOTICE '🔗 Connection String Format:';
-    RAISE NOTICE '   DATABASE_URL=postgresql://username:password@host/database?sslmode=require';
-    RAISE NOTICE '';
-    RAISE NOTICE '📚 Need help? Check the main README.md file';
-    RAISE NOTICE '🐛 Issues? Open a GitHub issue';
-    RAISE NOTICE '';
-    RAISE NOTICE '🚀 Your Best SAAS Kit V2 database is ready!';
 END $$;

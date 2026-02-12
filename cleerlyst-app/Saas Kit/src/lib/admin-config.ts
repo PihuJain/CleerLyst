@@ -1,38 +1,46 @@
-// Admin configuration - Add admin emails here
-export const ADMIN_EMAILS = [
-  'zainulabedeen0002@gmail.com',
-  'zain@bestsaaskit.com',
-  '42023640+zainulabedeen123@users.noreply.github.com', // Your GitHub email
-  // Add more admin emails as needed
-] as const;
+// ============================================================================
+// Admin configuration — Cleerlyst
+// ============================================================================
+// Admin status is determined by the `role` column in the users table,
+// NOT by matching plaintext email against a hardcoded list.
+//
+// The old SaaS Kit checked ADMIN_EMAILS — that pattern is removed because
+// Cleerlyst never exposes plaintext email in the session.
+// ============================================================================
 
-export type AdminEmail = typeof ADMIN_EMAILS[number];
+import type { Session } from "next-auth";
 
-// Check if an email is an admin email
-export function isAdminEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  return ADMIN_EMAILS.includes(email as AdminEmail);
-}
-
-// Admin permissions
+/** Admin permissions — extensible as needed. */
 export const ADMIN_PERMISSIONS = {
-  MANAGE_SYSTEM: 'manage_system',
+  MANAGE_DATASETS: "manage_datasets",
+  MANAGE_INSTITUTE: "manage_institute",
 } as const;
 
-export type AdminPermission = typeof ADMIN_PERMISSIONS[keyof typeof ADMIN_PERMISSIONS];
+export type AdminPermission =
+  (typeof ADMIN_PERMISSIONS)[keyof typeof ADMIN_PERMISSIONS];
 
-// Get admin permissions for an email (all admins have all permissions for now)
-export function getAdminPermissions(email: string | null | undefined): AdminPermission[] {
-  if (!isAdminEmail(email)) return [];
-  
+/** Check whether a session user has the admin role. */
+export function isAdmin(
+  user: Session["user"] | null | undefined,
+): boolean {
+  return user?.role === "admin";
+}
+
+/**
+ * All admins currently have all permissions.
+ * Extend this if granular permission checks are needed later.
+ */
+export function getAdminPermissions(
+  user: Session["user"] | null | undefined,
+): AdminPermission[] {
+  if (!isAdmin(user)) return [];
   return Object.values(ADMIN_PERMISSIONS);
 }
 
-// Check if admin has specific permission
+/** Check whether an admin user has a specific permission. */
 export function hasAdminPermission(
-  email: string | null | undefined, 
-  permission: AdminPermission
+  user: Session["user"] | null | undefined,
+  permission: AdminPermission,
 ): boolean {
-  const permissions = getAdminPermissions(email);
-  return permissions.includes(permission);
+  return getAdminPermissions(user).includes(permission);
 }

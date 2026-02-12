@@ -1,6 +1,13 @@
 import { auth } from "@/lib/auth"
+import { NextResponse } from "next/server"
 
 export default auth((req) => {
+  const requestId = crypto.randomUUID()
+
+  // Attach requestId to request headers
+  const requestHeaders = new Headers(req.headers)
+  requestHeaders.set("x-request-id", requestId)
+
   // Define protected routes
   const protectedPaths = ['/dashboard']
   const isProtectedPath = protectedPaths.some(path =>
@@ -12,6 +19,12 @@ export default auth((req) => {
     const newUrl = new URL('/auth/signin', req.nextUrl.origin)
     return Response.redirect(newUrl)
   }
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
 })
 
 export const config = {

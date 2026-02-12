@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SignOutButton } from "@/components/auth/signout-button";
 
+// NOTE: Cleerlyst never exposes plaintext email in the session.
+// The profile page displays name, role, and provider — not email.
+
 export default async function ProfilePage() {
   const session = await auth();
   const user = session?.user;
@@ -37,8 +40,8 @@ export default async function ProfilePage() {
                 <p className="font-medium">
                   {user?.name || "User"}
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  {user?.email}
+                <p className="text-sm text-muted-foreground capitalize">
+                  {user?.role ?? "student"}
                 </p>
               </div>
             </div>
