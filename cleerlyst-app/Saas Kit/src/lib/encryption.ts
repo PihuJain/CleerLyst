@@ -23,8 +23,18 @@ const ALGORITHM = "aes-256-gcm" as const;
 const IV_BYTES = 12; // NIST-recommended for GCM
 const TAG_LENGTH = 16; // 128-bit auth tag
 
-/** 256-bit key derived from the hex string validated by config.ts at startup. */
-const KEY = Buffer.from(config.encryptionKey, "hex");
+/**
+ * 256-bit key derived from the hex string validated by config.ts.
+ * Lazy — only resolved on first encrypt/decrypt call, not at import time.
+ * This prevents build failures when env vars aren't available (Vercel build step).
+ */
+let _key: Buffer | null = null;
+function getKey(): Buffer {
+  if (!_key) {
+    _key = Buffer.from(config.encryptionKey, "hex");
+  }
+  return _key;
+}
 
 // ---------------------------------------------------------------------------
 // Encrypt
@@ -39,7 +49,7 @@ const KEY = Buffer.from(config.encryptionKey, "hex");
 export function encryptPayload(payload: unknown): EncryptedPayload {
   const iv = randomBytes(IV_BYTES);
 
-  const cipher = createCipheriv(ALGORITHM, KEY, iv, {
+  const cipher = createCipheriv(ALGORITHM, getKey(), iv, {
     authTagLength: TAG_LENGTH,
   });
 
@@ -76,7 +86,7 @@ export function decryptPayload<T = unknown>(encrypted: EncryptedPayload): T {
   const authTag = Buffer.from(encrypted.authTag, "base64");
   const ciphertext = Buffer.from(encrypted.ciphertext, "base64");
 
-  const decipher = createDecipheriv(ALGORITHM, KEY, iv, {
+  const decipher = createDecipheriv(ALGORITHM, getKey(), iv, {
     authTagLength: TAG_LENGTH,
   });
   decipher.setAuthTag(authTag);

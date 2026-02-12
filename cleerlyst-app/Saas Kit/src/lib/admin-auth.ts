@@ -1,6 +1,10 @@
 import { auth } from "./auth";
 import { isAdmin, hasAdminPermission, type AdminPermission } from "./admin-config";
 import { redirect } from "next/navigation";
+import type { Session } from "next-auth";
+
+/** The user shape exposed by the Session type. */
+type SessionUser = Session["user"];
 
 /**
  * Check whether the current session user is an admin.
@@ -14,7 +18,7 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
 /**
  * Return the current user if they are an admin, otherwise null.
  */
-export async function getCurrentAdminUser() {
+export async function getCurrentAdminUser(): Promise<SessionUser | null> {
   const session = await auth();
   if (!session?.user || !isAdmin(session.user)) {
     return null;
@@ -25,7 +29,7 @@ export async function getCurrentAdminUser() {
 /**
  * Require admin role — redirect to sign-in or dashboard on failure.
  */
-export async function requireAdminAccess() {
+export async function requireAdminAccess(): Promise<SessionUser> {
   const session = await auth();
 
   if (!session?.user) {
@@ -42,7 +46,7 @@ export async function requireAdminAccess() {
 /**
  * Require a specific admin permission.
  */
-export async function requireAdminPermission(permission: AdminPermission) {
+export async function requireAdminPermission(permission: AdminPermission): Promise<SessionUser> {
   const session = await auth();
 
   if (!session?.user) {
@@ -61,7 +65,7 @@ export async function requireAdminPermission(permission: AdminPermission) {
  */
 export async function checkAdminAccess(): Promise<{
   isAdmin: boolean;
-  user: Awaited<ReturnType<typeof auth>>["user"] | null;
+  user: SessionUser | null;
 }> {
   const session = await auth();
 

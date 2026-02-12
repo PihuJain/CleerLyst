@@ -97,7 +97,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       session.user.instituteId = (token.instituteId as string) ?? "";
 
       // Strip plaintext email — it must never reach the client
-      delete (session.user as Record<string, unknown>).email;
+      delete (session.user as unknown as Record<string, unknown>).email;
 
       return session;
     },
