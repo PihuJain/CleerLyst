@@ -6,7 +6,7 @@ import {
   createUser,
   updateLastLogin,
 } from "./database";
-import { hashIdentifier } from "./hash";
+import { hashIdentifier } from "./identifier";
 
 // ---------------------------------------------------------------------------
 // Helper — extract domain from an email address

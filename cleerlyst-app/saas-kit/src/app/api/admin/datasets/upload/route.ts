@@ -7,7 +7,7 @@ import {
   insertAuditLog,
   type RecordInsertRow,
 } from "@/lib/database";
-import { hashIdentifier } from "@/lib/hash";
+import { hashIdentifier } from "@/lib/identifier";
 import { encryptPayload, toBuffer } from "@/lib/encryption";
 import { parseFile, type ParsedRow } from "@/lib/file-parser";
 import { logInfo, logWarn, logError } from "@/lib/logger";
