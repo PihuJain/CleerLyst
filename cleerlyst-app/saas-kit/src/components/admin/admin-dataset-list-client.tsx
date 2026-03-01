@@ -125,10 +125,9 @@ function formatDate(iso: string) {
 // ---------------------------------------------------------------------------
 
 export function AdminDatasetListClient({
-  datasets: initialDatasets,
+  datasets,
 }: AdminDatasetListClientProps) {
   const router = useRouter();
-  const [datasets, setDatasets] = React.useState(initialDatasets);
   const [actionLoading, setActionLoading] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [publishedBanner, setPublishedBanner] = React.useState<string | null>(null);
@@ -174,18 +173,8 @@ export function AdminDatasetListClient({
         setError(data.error || "Publish failed");
         return;
       }
-      setDatasets((prev) =>
-        prev.map((d) =>
-          d.id === datasetId
-            ? {
-                ...d,
-                status: "published",
-                published_at: data.published_at ?? new Date().toISOString(),
-              }
-            : d,
-        ),
-      );
       setPublishedBanner(datasetId);
+      router.refresh();
     } catch {
       setError("Network error — could not publish dataset");
     } finally {
@@ -205,11 +194,7 @@ export function AdminDatasetListClient({
         setError(data.error || "Revoke failed");
         return;
       }
-      setDatasets((prev) =>
-        prev.map((d) =>
-          d.id === datasetId ? { ...d, status: "revoked" } : d,
-        ),
-      );
+      router.refresh();
     } catch {
       setError("Network error — could not revoke dataset");
     } finally {
