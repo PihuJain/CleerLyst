@@ -4,6 +4,7 @@ import { getNotificationsForUser } from "@/lib/database";
 import { NotificationsClient } from "@/components/dashboard/notifications-client";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // ---------------------------------------------------------------------------
 // /dashboard/notifications

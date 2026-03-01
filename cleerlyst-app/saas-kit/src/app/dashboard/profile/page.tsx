@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { IdentifiersSection } from "@/components/profile/identifiers-section";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // ---------------------------------------------------------------------------
 // /dashboard/profile

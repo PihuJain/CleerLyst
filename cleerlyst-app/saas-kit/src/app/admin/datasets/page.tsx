@@ -3,6 +3,7 @@ import { getAdminDatasetsForInstitute } from "@/lib/database";
 import { AdminDatasetListClient } from "@/components/admin/admin-dataset-list-client";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // ---------------------------------------------------------------------------
 // /admin/datasets
