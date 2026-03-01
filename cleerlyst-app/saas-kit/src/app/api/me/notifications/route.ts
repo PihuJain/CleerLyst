@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getNotificationsForUser } from "@/lib/database";
+import {
+  getNotificationsForUser,
+  getUnreadNotificationCount,
+} from "@/lib/database";
 import { logWarn } from "@/lib/logger";
 import { runWithRequestContext } from "@/lib/request-context";
 import { rateLimiter } from "@/lib/rate-limiter";
@@ -13,11 +16,15 @@ export const runtime = "nodejs";
 //
 // Returns the authenticated user's notifications — most recent first.
 //
+// Query params:
+//   ?unread=true → returns { count: number } instead of full list.
+//
 // SECURITY INVARIANTS:
 //   • Auth required — 401 for unauthenticated callers.
 //   • Scoped to user_id from session — no cross-user access.
 //   • No payload content. No student data. No record references.
-//   • Only safe fields: id, dataset_id, dataset_title, type, read_at, created_at.
+//   • Only safe fields: id, dataset_id, dataset_title, type, is_read, created_at.
+//   • user_id is NEVER returned.
 //   • Rate-limited per userId (sliding window).
 //
 // ---------------------------------------------------------------------------
@@ -59,18 +66,28 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // ----- 3. Fetch notifications -----
+      // ----- 3. Handle ?unread=true — return count only -----
+
+      const unreadOnly =
+        request.nextUrl.searchParams.get("unread") === "true";
+
+      if (unreadOnly) {
+        const count = await getUnreadNotificationCount(userId);
+        const response = NextResponse.json({ count }, { status: 200 });
+        response.headers.set("Cache-Control", "private, no-store");
+        return response;
+      }
+
+      // ----- 4. Fetch full notification list -----
 
       const notifications = await getNotificationsForUser(userId);
-
-      // ----- 4. Serialize dates and return -----
 
       const result = notifications.map((n) => ({
         id: n.id,
         dataset_id: n.dataset_id,
         dataset_title: n.dataset_title,
         type: n.type,
-        read_at: n.read_at ? n.read_at.toISOString() : null,
+        is_read: n.read_at !== null,
         created_at: n.created_at.toISOString(),
       }));
 

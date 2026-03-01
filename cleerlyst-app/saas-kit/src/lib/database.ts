@@ -814,6 +814,32 @@ export async function getNotificationsForUser(
 }
 
 /**
+ * Return the count of unread notifications for a user.
+ *
+ * SECURITY INVARIANTS:
+ *   • Scoped to user_id — no cross-user access.
+ *   • Returns a single aggregate COUNT — no row-level data.
+ *   • Does NOT touch dataset_records.
+ */
+export async function getUnreadNotificationCount(
+  userId: string,
+): Promise<number> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+         FROM notifications
+        WHERE user_id = $1
+          AND read_at IS NULL`,
+      [userId],
+    );
+    return parseInt(result.rows[0]?.count ?? "0", 10);
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Mark a single notification as read for a specific user.
  *
  * SECURITY INVARIANTS:
