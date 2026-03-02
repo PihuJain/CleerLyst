@@ -403,6 +403,140 @@ export async function getPublishedDatasetsForInstitute(
 }
 
 // ---------------------------------------------------------------------------
+// Feed — enriched published dataset query + batch record lookups
+// ---------------------------------------------------------------------------
+
+/**
+ * Published dataset with fields needed for feed enrichment.
+ * Includes audience_type, identifier_type, and visibility_config
+ * so the feed route can decrypt/filter without per-dataset lookups.
+ */
+export interface PublishedDatasetForFeed {
+  id: string;
+  title: string;
+  type: string;
+  description: string | null;
+  audience_type: "restricted" | "public";
+  identifier_type: string;
+  visibility_config: Record<string, unknown>;
+  expires_at: Date | null;
+  created_at: Date;
+  published_at: Date;
+}
+
+/**
+ * Fetch published datasets with enrichment columns for the feed.
+ *
+ * SECURITY INVARIANTS:
+ *   • Columns listed explicitly — no SELECT *.
+ *   • No JOIN — single-table query on datasets only.
+ *   • Does NOT touch dataset_records.
+ *   • Filtered by institute_id.
+ */
+export async function getPublishedDatasetsForFeed(
+  instituteId: string,
+): Promise<PublishedDatasetForFeed[]> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<PublishedDatasetForFeed>(
+      `SELECT id, title, type, description, audience_type,
+              identifier_type, visibility_config, expires_at,
+              created_at, published_at
+         FROM datasets
+        WHERE institute_id = $1
+          AND status = 'published'
+          AND (expires_at IS NULL OR expires_at > NOW())
+        ORDER BY published_at DESC`,
+      [instituteId],
+    );
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Batch-fetch the first encrypted record for each dataset in a list.
+ * Used for public-audience datasets in the feed.
+ *
+ * Returns a Map<dataset_id, encrypted_payload>.
+ *
+ * SECURITY INVARIANTS:
+ *   • Returns only encrypted_payload — never identifier_hash.
+ *   • DISTINCT ON limits to one row per dataset — no enumeration.
+ *   • Does NOT join to users.
+ */
+export async function findFirstRecordsForDatasets(
+  datasetIds: string[],
+): Promise<Map<string, Buffer>> {
+  if (datasetIds.length === 0) return new Map();
+
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      dataset_id: string;
+      encrypted_payload: Buffer;
+    }>(
+      `SELECT DISTINCT ON (dataset_id) dataset_id, encrypted_payload
+         FROM dataset_records
+        WHERE dataset_id = ANY($1)
+        ORDER BY dataset_id, created_at`,
+      [datasetIds],
+    );
+    const map = new Map<string, Buffer>();
+    for (const row of result.rows) {
+      map.set(row.dataset_id, row.encrypted_payload);
+    }
+    return map;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Batch-fetch matching encrypted records across multiple datasets
+ * for a set of identifier hashes.
+ *
+ * Returns a Map<dataset_id, encrypted_payload>.
+ *
+ * SECURITY INVARIANTS:
+ *   • Hashes are pre-fetched from the user's DB records — never from request.
+ *   • Returns only encrypted_payload — never identifier_hash.
+ *   • DISTINCT ON limits to one row per dataset.
+ *   • Does NOT join to users.
+ */
+export async function findMatchingRecordsForDatasets(
+  datasetIds: string[],
+  identifierHashes: string[],
+): Promise<Map<string, Buffer>> {
+  if (datasetIds.length === 0 || identifierHashes.length === 0) {
+    return new Map();
+  }
+
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      dataset_id: string;
+      encrypted_payload: Buffer;
+    }>(
+      `SELECT DISTINCT ON (dataset_id) dataset_id, encrypted_payload
+         FROM dataset_records
+        WHERE dataset_id = ANY($1)
+          AND identifier_hash = ANY($2)
+        ORDER BY dataset_id, created_at`,
+      [datasetIds, identifierHashes],
+    );
+    const map = new Map<string, Buffer>();
+    for (const row of result.rows) {
+      map.set(row.dataset_id, row.encrypted_payload);
+    }
+    return map;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dataset publishing — transactional status transition + audit
 // ---------------------------------------------------------------------------
 
