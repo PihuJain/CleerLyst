@@ -37,7 +37,7 @@ interface DatasetVisibilityClientProps {
   datasetStatus: string;
   headers: string[];
   allowedFields: string[];
-  identifierType: string;
+  identifierType: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -475,7 +475,9 @@ export function DatasetVisibilityClient({
 
       {/* Security note */}
       <p className="text-xs text-muted-foreground text-center">
-        Identifier column ({identifierType}) is never exposed to students.
+        {identifierType
+          ? `Identifier column (${identifierType}) is never exposed to students. `
+          : ""}
         Unselected fields remain encrypted and inaccessible.
       </p>
 
