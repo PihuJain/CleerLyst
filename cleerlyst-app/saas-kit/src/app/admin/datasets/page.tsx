@@ -29,6 +29,7 @@ export default async function AdminDatasetsPage() {
     title: d.title,
     type: d.type,
     status: d.status,
+    audience_type: d.audience_type,
     has_headers: d.has_headers,
     has_visibility: d.has_visibility,
     created_at: d.created_at.toISOString(),

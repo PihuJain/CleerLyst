@@ -30,6 +30,7 @@ export const runtime = "nodejs";
 
 const VALID_TYPES = ["placement", "academic", "fest", "finance", "other"];
 const VALID_IDENTIFIER_TYPES = ["email", "reg_no"];
+const VALID_AUDIENCE_TYPES = ["restricted", "public"] as const;
 
 export async function POST(request: NextRequest) {
   const requestId =
@@ -73,6 +74,10 @@ export async function POST(request: NextRequest) {
         typeof body.identifier_type === "string"
           ? body.identifier_type.trim()
           : "";
+      const audienceType =
+        typeof body.audience_type === "string"
+          ? body.audience_type.trim()
+          : "restricted";
       const expiresAtRaw =
         typeof body.expires_at === "string" ? body.expires_at.trim() : null;
 
@@ -96,6 +101,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error: `identifier_type must be one of: ${VALID_IDENTIFIER_TYPES.join(", ")}`,
+          },
+          { status: 400 },
+        );
+      }
+
+      if (
+        !(VALID_AUDIENCE_TYPES as readonly string[]).includes(audienceType)
+      ) {
+        return NextResponse.json(
+          {
+            error: `audience_type must be one of: ${VALID_AUDIENCE_TYPES.join(", ")}`,
           },
           { status: 400 },
         );
@@ -125,6 +141,7 @@ export async function POST(request: NextRequest) {
             type,
             description,
             identifierType,
+            audienceType: audienceType as "restricted" | "public",
             expiresAt,
           },
           adminUserId,
