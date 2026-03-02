@@ -12,6 +12,9 @@ export default function Footer() {
           <Link href="/privacy" className="hover:text-foreground transition-colors duration-200">
             Privacy
           </Link>
+          <Link href="/terms" className="hover:text-foreground transition-colors duration-200">
+            Terms
+          </Link>
           <Link href="/contact" className="hover:text-foreground transition-colors duration-200">
             Contact
           </Link>
