@@ -5,6 +5,7 @@ import {
   getUserIdentifierHashes,
   getDatasetById,
   findRecordByHashes,
+  findFirstRecordForDataset,
   insertAuditLog,
   createNotificationIfAbsent,
 } from "@/lib/database";
@@ -145,50 +146,42 @@ export async function GET(
         return DATASET_NOT_FOUND;
       }
 
-      // ----- 3. Collect the logged-in user's identifier hashes -----
-      // These come ONLY from the server-side DB — never from the request.
+      // ----- 3. Fetch encrypted record -----
       //
-      // Query 1 (users / user_identifiers) — completely separate from
-      // Query 2 (dataset_records). No join.
-      //
-      // If the dataset requires a non-email identifier that the user has
-      // not yet registered, return a specific "missing_identifier" reason
-      // so the client can prompt the user to add it.
+      // PUBLIC datasets: fetch the first record — no identity matching.
+      // RESTRICTED datasets: collect user's identifier hashes, then match.
 
-      const hashes: string[] = [];
+      let encryptedBuffer: Buffer | null = null;
 
-      if (dataset.identifier_type === "email") {
-        // The dataset was indexed by email → match against users.email_hash
-        const user = await getUserById(userId);
-        if (user?.email_hash) {
-          hashes.push(user.email_hash);
-        }
+      if (dataset.audience_type === "public") {
+        encryptedBuffer = await findFirstRecordForDataset(datasetId);
       } else {
-        // The dataset was indexed by reg_no (or other identifier type) →
-        // match against user_identifiers.identifier_hash
-        const identHashes = await getUserIdentifierHashes(
-          userId,
-          dataset.identifier_type,
-        );
-        hashes.push(...identHashes);
-      }
+        // Collect the logged-in user's identifier hashes.
+        // These come ONLY from the server-side DB — never from the request.
+        const hashes: string[] = [];
 
-      if (hashes.length === 0) {
-        // For non-email identifier types, the user simply hasn't registered
-        // the required identifier yet. Surface this explicitly so the client
-        // can prompt them — this does NOT reveal record existence.
-        if (dataset.identifier_type !== "email") {
-          return missingIdentifier(dataset.identifier_type);
+        if (dataset.identifier_type === "email") {
+          const user = await getUserById(userId);
+          if (user?.email_hash) {
+            hashes.push(user.email_hash);
+          }
+        } else {
+          const identHashes = await getUserIdentifierHashes(
+            userId,
+            dataset.identifier_type,
+          );
+          hashes.push(...identHashes);
         }
 
-        return NOT_MATCHED;
+        if (hashes.length === 0) {
+          if (dataset.identifier_type !== "email") {
+            return missingIdentifier(dataset.identifier_type);
+          }
+          return NOT_MATCHED;
+        }
+
+        encryptedBuffer = await findRecordByHashes(datasetId, hashes);
       }
-
-      // ----- 4. Look up the record -----
-      // Query 2: dataset_records only — no join to users.
-      // Returns the raw encrypted_payload (bytea) or null.
-
-      const encryptedBuffer = await findRecordByHashes(datasetId, hashes);
 
       if (!encryptedBuffer) {
         return NOT_MATCHED;

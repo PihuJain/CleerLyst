@@ -266,6 +266,35 @@ export async function findRecordByHashes(
   }
 }
 
+/**
+ * Fetch the first encrypted record for a dataset (no identity matching).
+ *
+ * Used for public-audience datasets where every institute student
+ * may view the content without identifier-based matching.
+ *
+ * SECURITY INVARIANTS:
+ *   • Returns only encrypted_payload — never identifier_hash.
+ *   • LIMIT 1 — no enumeration.
+ *   • Does NOT join to users.
+ */
+export async function findFirstRecordForDataset(
+  datasetId: string,
+): Promise<Buffer | null> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{ encrypted_payload: Buffer }>(
+      `SELECT encrypted_payload
+         FROM dataset_records
+        WHERE dataset_id = $1
+        LIMIT 1`,
+      [datasetId],
+    );
+    return result.rows[0]?.encrypted_payload ?? null;
+  } finally {
+    client.release();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Dataset queries
 // ---------------------------------------------------------------------------
