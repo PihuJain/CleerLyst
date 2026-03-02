@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
       const file = formData.get("file");
       const datasetId = formData.get("datasetId");
-      const identifierColumn = formData.get("identifierColumn");
+      const identifierColumnRaw = formData.get("identifierColumn");
 
       if (!(file instanceof File)) {
         return NextResponse.json({ error: "Missing file" }, { status: 400 });
@@ -82,12 +82,12 @@ export async function POST(request: NextRequest) {
       if (typeof datasetId !== "string" || !datasetId.trim()) {
         return NextResponse.json({ error: "Missing datasetId" }, { status: 400 });
       }
-      if (typeof identifierColumn !== "string" || !identifierColumn.trim()) {
-        return NextResponse.json(
-          { error: "Missing identifierColumn" },
-          { status: 400 },
-        );
-      }
+
+      // identifierColumn is required for restricted datasets, ignored for public
+      const identifierColumn =
+        typeof identifierColumnRaw === "string"
+          ? identifierColumnRaw.trim()
+          : "";
 
       if (file.size > MAX_FILE_SIZE) {
         return NextResponse.json(
@@ -143,7 +143,26 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "dataset_schema_locked" }, { status: 400 });
       }
 
-      // Fetch institute for the salt (institute.id is the salt)
+      const isPublic = dataset.audience_type === "public";
+
+      // ----- Public dataset hard guards -----
+
+      if (isPublic && dataset.identifier_type !== null) {
+        return NextResponse.json(
+          { error: "public_dataset_cannot_require_identifier" },
+          { status: 400 },
+        );
+      }
+
+      // Restricted datasets require identifierColumn
+      if (!isPublic && !identifierColumn) {
+        return NextResponse.json(
+          { error: "Missing identifierColumn" },
+          { status: 400 },
+        );
+      }
+
+      // Fetch institute for the salt (restricted datasets need it for hashing)
       const institute = await getInstituteById(dataset.institute_id);
       if (!institute) {
         return NextResponse.json(
@@ -160,17 +179,101 @@ export async function POST(request: NextRequest) {
       try {
         parsed = parseFile(rawBuffer, file.type || file.name);
       } catch (err) {
-        rawBuffer = null; // destroy
+        rawBuffer = null;
         const message = err instanceof Error ? err.message : "File parse error";
         return NextResponse.json({ error: message }, { status: 400 });
       }
 
-      // Destroy the raw file buffer — plaintext data must not linger
       rawBuffer = null;
+
+      if (parsed.rows.length === 0) {
+        return NextResponse.json(
+          { error: "File contains no data rows" },
+          { status: 400 },
+        );
+      }
+
+      // ----- Public dataset: enforce single row, no identifier column -----
+
+      if (isPublic) {
+        if (parsed.rows.length !== 1) {
+          return NextResponse.json(
+            { error: "public_dataset_must_have_single_row" },
+            { status: 400 },
+          );
+        }
+
+        if (identifierColumn && parsed.headers.includes(identifierColumn)) {
+          return NextResponse.json(
+            { error: "public_dataset_cannot_have_identifier_column" },
+            { status: 400 },
+          );
+        }
+
+        const canonicalHeaders = parsed.headers
+          .map((h) => h.trim())
+          .filter(Boolean);
+
+        const row = parsed.rows[0];
+        const payload: Record<string, string> = {};
+        for (const key of parsed.headers) {
+          payload[key] = row[key] ?? "";
+        }
+
+        const encrypted = encryptPayload(payload);
+        const payloadBuffer = toBuffer(encrypted);
+
+        const insertRows: RecordInsertRow[] = [
+          {
+            identifierHash: "__public__",
+            encryptedPayload: payloadBuffer,
+          },
+        ];
+
+        parsed.rows.length = 0;
+
+        let inserted: number;
+        try {
+          inserted = await insertRecordsBatch(dataset.id, insertRows, canonicalHeaders);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Database insert failed";
+          logError("dataset.upload.insert_error", { datasetId: dataset.id, message });
+          return NextResponse.json(
+            { error: "Database insert failed — no records were saved" },
+            { status: 500 },
+          );
+        }
+
+        try {
+          await insertAuditLog(adminUserId, "dataset.records_uploaded", dataset.id, {
+            inserted,
+            skipped: 0,
+            headerCount: canonicalHeaders.length,
+            audience_type: "public",
+            fileName: file.name,
+            fileSizeBytes: file.size,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Audit log write failed";
+          logError("dataset.upload.audit_error", { datasetId: dataset.id, message });
+        }
+
+        logInfo("dataset.upload.success", {
+          datasetId: dataset.id,
+          inserted,
+          skipped: 0,
+          headerCount: canonicalHeaders.length,
+          audience_type: "public",
+        });
+
+        return NextResponse.json({ success: true, inserted, skipped: 0 });
+      }
+
+      // ----- Restricted dataset processing (existing logic) -----
 
       // ----- 7. Validate identifier column exists -----
 
-      const colName = identifierColumn.trim();
+      const colName = identifierColumn;
       if (!parsed.headers.includes(colName)) {
         return NextResponse.json(
           {
@@ -180,27 +283,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (parsed.rows.length === 0) {
-        return NextResponse.json(
-          { error: "File contains no data rows" },
-          { status: 400 },
-        );
-      }
-
-      // ----- 8. PROMPT 7: Canonicalize headers, exclude identifier column -----
-      //
-      // Headers are trimmed, empty strings removed, identifier column excluded.
-      // This is the canonical schema that will be stored immutably.
+      // ----- 8. Canonicalize headers, exclude identifier column -----
 
       const canonicalHeaders = parsed.headers
         .map((h) => h.trim())
         .filter(Boolean)
         .filter((h) => h !== colName);
 
-      // ----- 9. PROMPT 5: Hash identifiers + detect in-file duplicates -----
-      //
-      // A Set tracks every hashed identifier. If a duplicate hash is found,
-      // the ENTIRE upload is aborted — no partial inserts.
+      // ----- 9. Hash identifiers + detect in-file duplicates -----
 
       const insertRows: RecordInsertRow[] = [];
       const seenHashes = new Set<string>();
@@ -209,16 +299,13 @@ export async function POST(request: NextRequest) {
       for (const row of parsed.rows) {
         const identifierValue = row[colName];
 
-        // Skip rows with empty identifier
         if (!identifierValue || identifierValue.trim() === "") {
           skipped++;
           continue;
         }
 
-        // Hash the identifier
         const identHash = hashIdentifier(identifierValue.trim(), institute.id);
 
-        // PROMPT 5: Duplicate detection within the file
         if (seenHashes.has(identHash)) {
           logWarn("dataset.upload.duplicate_in_file", {
             datasetId: dataset.id,
@@ -231,7 +318,6 @@ export async function POST(request: NextRequest) {
         }
         seenHashes.add(identHash);
 
-        // Build payload: every column EXCEPT the identifier column
         const payload: Record<string, string> = {};
         for (const key of parsed.headers) {
           if (key !== colName) {
@@ -239,7 +325,6 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Encrypt payload → pack into bytea-ready buffer
         const encrypted = encryptPayload(payload);
         const payloadBuffer = toBuffer(encrypted);
 
@@ -249,7 +334,6 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Free parsed rows — we only need insertRows from here
       parsed.rows.length = 0;
 
       if (insertRows.length === 0) {

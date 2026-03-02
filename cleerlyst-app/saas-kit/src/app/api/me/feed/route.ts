@@ -37,7 +37,11 @@ export const runtime = "nodejs";
 //
 // ---------------------------------------------------------------------------
 
-type FeedStatus = "shortlisted" | "not_selected" | "no_record" | "public";
+type FeedStatus =
+  | "shortlisted"
+  | "public"
+  | "not_applicable"
+  | "missing_identifier";
 
 interface FeedItem {
   dataset_id: string;
@@ -49,10 +53,17 @@ interface FeedItem {
   data: Record<string, unknown> | null;
   published_at: string;
   expires_at: string | null;
+  identifier_type?: string;
+}
+
+interface FeedResponse {
+  requires_identifier_setup: boolean;
+  required_identifier_types: string[];
+  items: FeedItem[];
 }
 
 function secureFeedResponse(
-  body: FeedItem[],
+  body: FeedResponse,
   status: number,
 ): NextResponse {
   const response = NextResponse.json(body, { status });
@@ -143,7 +154,10 @@ export async function GET(request: NextRequest) {
       const datasets = await getPublishedDatasetsForFeed(instituteId);
 
       if (datasets.length === 0) {
-        return secureFeedResponse([], 200);
+        return secureFeedResponse(
+          { requires_identifier_setup: false, required_identifier_types: [], items: [] },
+          200,
+        );
       }
 
       // ----- 4. Partition into public / restricted -----
@@ -159,46 +173,49 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // ----- 5. Batch-fetch records (max 2 queries) -----
+      // ----- 5. Collect identifier hashes per type (single pass) -----
+      //
+      // We track hashes per identifier_type so we can distinguish
+      // "missing_identifier" (user hasn't registered this type)
+      // from "not_applicable" (registered but no match).
 
-      const publicRecordsPromise = findFirstRecordsForDatasets(
-        publicDatasets.map((d) => d.id),
-      );
-
-      // Collect the user's identifier hashes ONCE for all restricted datasets.
-      // Group restricted datasets by identifier_type to collect the right hashes.
-      const identifierTypes = new Set(
-        restrictedDatasets.map((d) => d.identifier_type),
-      );
-
-      const allHashes: string[] = [];
+      const hashesForType = new Map<string, string[]>();
 
       if (restrictedDatasets.length > 0) {
-        if (identifierTypes.has("email")) {
-          const user = await getUserById(userId);
-          if (user?.email_hash) {
-            allHashes.push(user.email_hash);
-          }
-        }
+        const identifierTypes = new Set(
+          restrictedDatasets
+            .map((d) => d.identifier_type)
+            .filter((t): t is string => t !== null),
+        );
 
         for (const iType of identifierTypes) {
-          if (iType === "email") continue;
-          const hashes = await getUserIdentifierHashes(userId, iType);
-          allHashes.push(...hashes);
+          const hashes: string[] = [];
+
+          if (iType === "email") {
+            const user = await getUserById(userId);
+            if (user?.email_hash) hashes.push(user.email_hash);
+          } else {
+            const h = await getUserIdentifierHashes(userId, iType);
+            hashes.push(...h);
+          }
+
+          hashesForType.set(iType, hashes);
         }
       }
 
-      const restrictedRecordsPromise = findMatchingRecordsForDatasets(
-        restrictedDatasets.map((d) => d.id),
-        allHashes,
-      );
+      const allHashes = Array.from(hashesForType.values()).flat();
+
+      // ----- 6. Batch-fetch records (max 2 queries, parallel) -----
 
       const [publicRecords, restrictedRecords] = await Promise.all([
-        publicRecordsPromise,
-        restrictedRecordsPromise,
+        findFirstRecordsForDatasets(publicDatasets.map((d) => d.id)),
+        findMatchingRecordsForDatasets(
+          restrictedDatasets.map((d) => d.id),
+          allHashes,
+        ),
       ]);
 
-      // ----- 6. Build unified feed -----
+      // ----- 7. Build unified feed -----
 
       const feed: FeedItem[] = [];
 
@@ -209,34 +226,56 @@ export async function GET(request: NextRequest) {
           type: ds.type,
           description: ds.description,
           audience_type: ds.audience_type,
-          status: "no_record",
+          status: "not_applicable",
           data: null,
           published_at: ds.published_at.toISOString(),
           expires_at: ds.expires_at ? ds.expires_at.toISOString() : null,
+          identifier_type:
+            ds.audience_type === "restricted" && ds.identifier_type
+              ? ds.identifier_type
+              : undefined,
         };
 
         if (ds.audience_type === "public") {
           const buf = publicRecords.get(ds.id);
+          item.status = "public";
           if (buf) {
-            item.status = "public";
             item.data = decryptAndFilter(buf, ds);
           }
         } else {
-          const buf = restrictedRecords.get(ds.id);
-          if (buf) {
-            item.status = "shortlisted";
-            item.data = decryptAndFilter(buf, ds);
-          } else if (allHashes.length === 0) {
-            item.status = "no_record";
+          const userHashes = hashesForType.get(ds.identifier_type!) ?? [];
+
+          if (userHashes.length === 0) {
+            item.status = "missing_identifier";
           } else {
-            item.status = "not_selected";
+            const buf = restrictedRecords.get(ds.id);
+            if (buf) {
+              item.status = "shortlisted";
+              item.data = decryptAndFilter(buf, ds);
+            } else {
+              item.status = "not_applicable";
+            }
           }
         }
 
         feed.push(item);
       }
 
-      return secureFeedResponse(feed, 200);
+      // ----- 8. Compute identifier gating flags -----
+
+      const missingTypes: string[] = [];
+      for (const [iType, hashes] of hashesForType) {
+        if (hashes.length === 0) missingTypes.push(iType);
+      }
+
+      return secureFeedResponse(
+        {
+          requires_identifier_setup: missingTypes.length > 0,
+          required_identifier_types: missingTypes,
+          items: feed,
+        },
+        200,
+      );
     },
   );
 }

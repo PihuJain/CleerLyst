@@ -306,7 +306,7 @@ export interface Dataset {
   type: string;
   title: string;
   description: string | null;
-  identifier_type: string;
+  identifier_type: string | null;
   audience_type: "restricted" | "public";
   visibility_config: Record<string, unknown>;
   headers: string[];
@@ -417,7 +417,7 @@ export interface PublishedDatasetForFeed {
   type: string;
   description: string | null;
   audience_type: "restricted" | "public";
-  identifier_type: string;
+  identifier_type: string | null;
   visibility_config: Record<string, unknown>;
   expires_at: Date | null;
   created_at: Date;
@@ -1098,7 +1098,7 @@ export interface CreateDatasetInput {
   title: string;
   type: string;
   description: string | null;
-  identifierType: string;
+  identifierType: string | null;
   audienceType: "restricted" | "public";
   expiresAt: Date | null;
 }

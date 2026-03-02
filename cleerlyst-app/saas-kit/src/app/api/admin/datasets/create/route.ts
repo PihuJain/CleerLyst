@@ -70,14 +70,16 @@ export async function POST(request: NextRequest) {
       const type = typeof body.type === "string" ? body.type.trim() : "";
       const description =
         typeof body.description === "string" ? body.description.trim() : null;
-      const identifierType =
-        typeof body.identifier_type === "string"
-          ? body.identifier_type.trim()
-          : "";
       const audienceType =
         typeof body.audience_type === "string"
           ? body.audience_type.trim()
           : "restricted";
+      const identifierType =
+        body.identifier_type === null
+          ? null
+          : typeof body.identifier_type === "string"
+            ? body.identifier_type.trim()
+            : "";
       const expiresAtRaw =
         typeof body.expires_at === "string" ? body.expires_at.trim() : null;
 
@@ -97,21 +99,32 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (!VALID_IDENTIFIER_TYPES.includes(identifierType)) {
-        return NextResponse.json(
-          {
-            error: `identifier_type must be one of: ${VALID_IDENTIFIER_TYPES.join(", ")}`,
-          },
-          { status: 400 },
-        );
-      }
-
       if (
         !(VALID_AUDIENCE_TYPES as readonly string[]).includes(audienceType)
       ) {
         return NextResponse.json(
           {
             error: `audience_type must be one of: ${VALID_AUDIENCE_TYPES.join(", ")}`,
+          },
+          { status: 400 },
+        );
+      }
+
+      if (audienceType === "public" && identifierType !== null) {
+        return NextResponse.json(
+          { error: "public_dataset_cannot_require_identifier" },
+          { status: 400 },
+        );
+      }
+
+      if (
+        audienceType === "restricted" &&
+        (identifierType === null ||
+          !VALID_IDENTIFIER_TYPES.includes(identifierType))
+      ) {
+        return NextResponse.json(
+          {
+            error: `identifier_type must be one of: ${VALID_IDENTIFIER_TYPES.join(", ")}`,
           },
           { status: 400 },
         );

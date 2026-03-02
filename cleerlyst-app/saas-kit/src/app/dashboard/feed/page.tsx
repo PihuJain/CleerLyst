@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { FeedClient } from "@/components/dashboard/feed-client";
@@ -12,5 +13,9 @@ export default async function FeedPage() {
     redirect("/auth/signin?callbackUrl=/dashboard/feed");
   }
 
-  return <FeedClient />;
+  return (
+    <Suspense>
+      <FeedClient />
+    </Suspense>
+  );
 }

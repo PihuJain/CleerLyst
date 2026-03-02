@@ -43,6 +43,7 @@ export default async function AdminDatasetUploadPage({
       datasetTitle={dataset.title}
       datasetStatus={dataset.status}
       identifierType={dataset.identifier_type}
+      audienceType={dataset.audience_type}
     />
   );
 }

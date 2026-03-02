@@ -30,7 +30,8 @@ interface AdminDatasetUploadClientProps {
   datasetId: string;
   datasetTitle: string;
   datasetStatus: string;
-  identifierType: string;
+  identifierType: string | null;
+  audienceType: "restricted" | "public";
 }
 
 // ---------------------------------------------------------------------------
@@ -42,10 +43,12 @@ export function AdminDatasetUploadClient({
   datasetTitle,
   datasetStatus,
   identifierType,
+  audienceType,
 }: AdminDatasetUploadClientProps) {
+  const isPublic = audienceType === "public";
   const [file, setFile] = React.useState<File | null>(null);
   const [identifierColumn, setIdentifierColumn] = React.useState(
-    identifierType === "email" ? "email" : "reg_no",
+    identifierType === "email" ? "email" : identifierType ?? "",
   );
   const [uploading, setUploading] = React.useState(false);
   const [result, setResult] = React.useState<{
@@ -67,7 +70,9 @@ export function AdminDatasetUploadClient({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("datasetId", datasetId);
-      formData.append("identifierColumn", identifierColumn);
+      if (!isPublic) {
+        formData.append("identifierColumn", identifierColumn);
+      }
 
       const res = await fetch("/api/admin/datasets/upload", {
         method: "POST",
@@ -124,9 +129,9 @@ export function AdminDatasetUploadClient({
             Upload CSV or XLSX
           </CardTitle>
           <CardDescription>
-            Upload a file containing records. Each row must have an identifier
-            column ({identifierType === "email" ? "email address" : "registration number"}).
-            The identifier column will be hashed — all other columns will be encrypted.
+            {isPublic
+              ? "Upload a file with exactly one row. All columns will be encrypted. No identifier column needed."
+              : `Upload a file containing records. Each row must have an identifier column (${identifierType === "email" ? "email address" : "registration number"}). The identifier column will be hashed — all other columns will be encrypted.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -146,28 +151,32 @@ export function AdminDatasetUploadClient({
             </p>
           </div>
 
-          {/* Identifier column */}
-          <div className="space-y-2">
-            <Label htmlFor="id-column">Identifier Column Name</Label>
-            <Input
-              id="id-column"
-              placeholder={
-                identifierType === "email" ? "e.g. email" : "e.g. reg_no"
-              }
-              value={identifierColumn}
-              onChange={(e) => setIdentifierColumn(e.target.value)}
-              disabled={uploading}
-            />
-            <p className="text-xs text-muted-foreground">
-              The exact column header in your file that contains the{" "}
-              {identifierType === "email" ? "email" : "registration number"}.
-            </p>
-          </div>
+          {/* Identifier column — restricted datasets only */}
+          {!isPublic && (
+            <div className="space-y-2">
+              <Label htmlFor="id-column">Identifier Column Name</Label>
+              <Input
+                id="id-column"
+                placeholder={
+                  identifierType === "email" ? "e.g. email" : "e.g. reg_no"
+                }
+                value={identifierColumn}
+                onChange={(e) => setIdentifierColumn(e.target.value)}
+                disabled={uploading}
+              />
+              <p className="text-xs text-muted-foreground">
+                The exact column header in your file that contains the{" "}
+                {identifierType === "email" ? "email" : "registration number"}.
+              </p>
+            </div>
+          )}
 
           {/* Upload button */}
           <Button
             onClick={handleUpload}
-            disabled={uploading || !file || !identifierColumn.trim()}
+            disabled={
+              uploading || !file || (!isPublic && !identifierColumn.trim())
+            }
             className="w-full"
           >
             {uploading ? (
