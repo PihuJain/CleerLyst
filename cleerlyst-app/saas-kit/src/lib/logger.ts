@@ -10,9 +10,15 @@ interface LogEntry {
   actorUserId: string | null | undefined;
   route: string | undefined;
   metadata?: Record<string, unknown>;
+  error?: { message: string; stack?: string };
 }
 
-function emit(level: LogLevel, event: string, metadata?: Record<string, unknown>): void {
+function emit(
+  level: LogLevel,
+  event: string,
+  metadata?: Record<string, unknown>,
+  err?: unknown,
+): void {
   const ctx = getRequestContext();
 
   const entry: LogEntry = {
@@ -24,6 +30,12 @@ function emit(level: LogLevel, event: string, metadata?: Record<string, unknown>
     route: ctx?.route,
     ...(metadata !== undefined && { metadata }),
   };
+
+  if (err instanceof Error) {
+    entry.error = { message: err.message, stack: err.stack };
+  } else if (err !== undefined) {
+    entry.error = { message: String(err) };
+  }
 
   const line = JSON.stringify(entry);
 
@@ -47,6 +59,6 @@ export function logWarn(event: string, metadata?: Record<string, unknown>): void
   emit("warn", event, metadata);
 }
 
-export function logError(event: string, metadata?: Record<string, unknown>): void {
-  emit("error", event, metadata);
+export function logError(event: string, metadata?: Record<string, unknown>, err?: unknown): void {
+  emit("error", event, metadata, err);
 }
