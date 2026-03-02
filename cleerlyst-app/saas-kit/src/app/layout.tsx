@@ -16,37 +16,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI SAAS Kit - Build AI-Powered Applications in Minutes",
-  description: "The ultimate toolkit for developers to create, customize, and launch AI-powered SAAS applications with authentication, payments, and modern UI components.",
-  keywords: ["AI", "SAAS", "Next.js", "TypeScript", "Tailwind CSS", "ShadCN", "OpenRouter", "Clerk", "Neon"],
-  authors: [{ name: "AI SAAS Kit Team" }],
-  creator: "AI SAAS Kit",
-  publisher: "AI SAAS Kit",
+  title: "Cleerlyst \u2014 Secure Academic Results",
+  description:
+    "A private platform for institutions to publish verified academic datasets securely.",
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://aisaaskit.com",
-    title: "AI SAAS Kit - Build AI-Powered Applications in Minutes",
-    description: "The ultimate toolkit for developers to create, customize, and launch AI-powered SAAS applications with authentication, payments, and modern UI components.",
-    siteName: "AI SAAS Kit",
+    title: "Cleerlyst \u2014 Secure Academic Results",
+    description:
+      "A private platform for institutions to publish verified academic datasets securely.",
+    siteName: "Cleerlyst",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AI SAAS Kit - Build AI-Powered Applications in Minutes",
-    description: "The ultimate toolkit for developers to create, customize, and launch AI-powered SAAS applications with authentication, payments, and modern UI components.",
-    creator: "@aisaaskit",
+    title: "Cleerlyst \u2014 Secure Academic Results",
+    description:
+      "A private platform for institutions to publish verified academic datasets securely.",
   },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
@@ -58,8 +45,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#0a0a0a" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <ThemeScript />
@@ -68,7 +54,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
       >
         <ThemeProvider
-          defaultTheme="system"
+          defaultTheme="dark"
           storageKey="ui-theme"
         >
           {children}

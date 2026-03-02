@@ -1,178 +1,104 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { ArrowRight, Sparkles, Zap, Code, Rocket, Github } from "lucide-react"
-import Link from "next/link"
-import { motion } from "framer-motion"
+import { SignInButton } from "@/components/auth/signin-button";
+import { SectionFade } from "./SectionFade";
 
-const Hero = () => {
+function MockCard({
+  title,
+  badge,
+  badgeColor,
+  rows,
+  accentLeft,
+}: {
+  title: string;
+  badge: string;
+  badgeColor: string;
+  rows: { label: string; value: string }[];
+  accentLeft?: string;
+}) {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-background via-background to-muted/20 pt-20 sm:pt-16">
-      {/* Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-secondary/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
-      </div>
-
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="space-y-6 sm:space-y-8"
+    <div
+      className="rounded-xl border border-border bg-card/80 p-4 transition-colors duration-300"
+      style={accentLeft ? { borderLeftWidth: 3, borderLeftColor: accentLeft } : undefined}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium text-foreground truncate mr-2">{title}</span>
+        <span
+          className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${badgeColor}`}
         >
-          {/* Badge */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="inline-flex items-center space-x-2 bg-muted/50 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm text-muted-foreground"
-          >
-            <Sparkles className="w-3 h-3 sm:w-4 sm:h-4" />
-            <span className="whitespace-nowrap">Ultimate AI SAAS Kit - Launch in Minutes</span>
-          </motion.div>
-
-          {/* Main Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-            className="text-3xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-tight"
-          >
-            Build AI-Powered
-            <br />
-            <span className="bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
-              SAAS Applications
-            </span>
-            <br />
-            in Minutes
-          </motion.h1>
-
-          {/* Subtitle */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed px-4"
-          >
-            The complete toolkit for developers to create, customize, and launch
-            AI-powered SAAS applications with authentication, payments, and modern UI components.
-          </motion.p>
-
-          {/* Feature Pills */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.5 }}
-            className="flex flex-wrap justify-center gap-4 text-sm"
-          >
-            <div className="flex items-center space-x-2 bg-muted/30 backdrop-blur-sm border border-border rounded-full px-4 py-2">
-              <Zap className="w-4 h-4 text-primary" />
-              <span>Next.js 15 + TypeScript</span>
-            </div>
-            <div className="flex items-center space-x-2 bg-muted/30 backdrop-blur-sm border border-border rounded-full px-4 py-2">
-              <Code className="w-4 h-4 text-primary" />
-              <span>ShadCN UI + Tailwind</span>
-            </div>
-            <div className="flex items-center space-x-2 bg-muted/30 backdrop-blur-sm border border-border rounded-full px-4 py-2">
-              <Rocket className="w-4 h-4 text-primary" />
-              <span>AI Integration Ready</span>
-            </div>
-          </motion.div>
-
-          {/* CTA Buttons */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.6 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4"
-          >
-            <Button
-              size="lg"
-              className="text-base font-medium px-6 py-3 h-12 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
-              asChild
-            >
-              <Link href="/get-started" className="flex items-center space-x-2">
-                <span>Get Started Free</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="text-base font-medium px-6 py-3 h-12 rounded-lg border-2 hover:bg-muted/50 transition-all duration-300 hover:scale-105"
-              asChild
-            >
-              <Link href="/demo">View Live Demo</Link>
-            </Button>
-          </motion.div>
-
-          {/* GitHub Button */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.7 }}
-            className="flex items-center justify-center pt-4"
-          >
-            <Button
-              size="lg"
-              variant="ghost"
-              className="text-base font-medium px-6 py-3 h-12 rounded-lg hover:bg-muted/30 transition-all duration-300 hover:scale-105 border border-border/50"
-              asChild
-            >
-              <Link
-                href="https://github.com/zainulabedeen123/Best-Saas-Kit--V2"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center space-x-2"
-              >
-                <Github className="w-5 h-5" />
-                <span>View on GitHub</span>
-              </Link>
-            </Button>
-          </motion.div>
-
-          {/* Social Proof */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.8 }}
-            className="pt-8 text-sm text-muted-foreground"
-          >
-            <p>Trusted by 1000+ developers worldwide</p>
-            <div className="flex justify-center items-center space-x-8 mt-4 opacity-60">
-              <div className="text-xs font-medium">⭐⭐⭐⭐⭐ 4.9/5</div>
-              <div className="text-xs">•</div>
-              <div className="text-xs font-medium">500+ GitHub Stars</div>
-              <div className="text-xs">•</div>
-              <div className="text-xs font-medium">Open Source</div>
-            </div>
-          </motion.div>
-        </motion.div>
+          {badge}
+        </span>
       </div>
-
-      {/* Scroll Indicator */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1, delay: 1 }}
-        className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
-      >
-        <motion.div
-          animate={{ y: [0, 10, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="w-6 h-10 border-2 border-muted-foreground/30 rounded-full flex justify-center"
-        >
-          <motion.div
-            animate={{ y: [0, 12, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="w-1 h-3 bg-muted-foreground/50 rounded-full mt-2"
-          />
-        </motion.div>
-      </motion.div>
-    </section>
-  )
+      <div className="space-y-2">
+        {rows.map((r) => (
+          <div key={r.label} className="flex justify-between text-xs">
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className="text-foreground">{r.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-export default Hero
+export default function Hero() {
+  return (
+    <section className="relative pt-32 pb-24 overflow-hidden">
+      <div className="max-w-6xl mx-auto px-6">
+        <SectionFade>
+          <div className="grid md:grid-cols-2 gap-16 items-center">
+            {/* Left — Copy */}
+            <div>
+              <h1 className="text-5xl md:text-6xl font-semibold tracking-tight text-foreground leading-[1.08]">
+                Secure Academic Results.{" "}
+                <span className="text-emerald-500">Delivered Privately.</span>
+              </h1>
+              <p className="mt-6 text-lg text-muted-foreground max-w-xl leading-relaxed">
+                Institutions publish verified datasets. Students see only what
+                applies to them.
+              </p>
+              <div className="mt-10 flex flex-wrap gap-4">
+                <SignInButton className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-medium text-white shadow-sm hover:bg-emerald-500 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 transition-all duration-300">
+                  Sign in with Institute Email
+                </SignInButton>
+                <a
+                  href="#how-it-works"
+                  className="inline-flex items-center rounded-xl border border-border bg-muted px-6 py-3 text-sm font-medium text-foreground hover:bg-muted/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 transition-all duration-300"
+                >
+                  Learn how it works
+                </a>
+              </div>
+            </div>
+
+            {/* Right — Product mock */}
+            <div className="relative" aria-hidden="true">
+              <div className="rounded-2xl border border-border bg-card shadow-lg p-5 sm:p-6 space-y-4">
+                <MockCard
+                  title="Dell \u2014 Shortlisted Students"
+                  badge="Selected"
+                  badgeColor="bg-emerald-500/15 text-emerald-400"
+                  accentLeft="#10b981"
+                  rows={[
+                    { label: "Status", value: "Selected" },
+                    { label: "Interview Date", value: "12 March 2026" },
+                    { label: "Location", value: "Virtual" },
+                  ]}
+                />
+                <MockCard
+                  title="Mid-Semester Proctor Meeting"
+                  badge="Institute Update"
+                  badgeColor="bg-blue-500/15 text-blue-400"
+                  rows={[
+                    { label: "Date", value: "18 March 2026" },
+                    { label: "Venue", value: "Room 204" },
+                  ]}
+                />
+              </div>
+              <div className="absolute -inset-4 -z-10 rounded-3xl bg-emerald-500/5 blur-2xl" />
+            </div>
+          </div>
+        </SectionFade>
+      </div>
+    </section>
+  );
+}
