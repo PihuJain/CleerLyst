@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { deleteUserIdentifier } from "@/lib/database";
-import { logInfo, logWarn } from "@/lib/logger";
-import { runWithRequestContext } from "@/lib/request-context";
+import { logInfo } from "@/lib/logger";
+import {
+  withApiHandler,
+  type HandlerSession,
+  type RouteContext,
+} from "@/lib/api-handler";
+import { unauthorized, badRequest, rateLimited } from "@/lib/errors";
+import { rateLimiter } from "@/lib/rate-limiter";
 
 export const runtime = "nodejs";
 
@@ -26,49 +31,37 @@ export const runtime = "nodejs";
 
 const ALLOWED_TYPES = ["reg_no", "roll_no"] as const;
 
-export async function DELETE(
+async function handler(
   request: NextRequest,
-  { params }: { params: Promise<{ type: string }> },
+  session: HandlerSession | null,
+  context: RouteContext,
 ) {
-  const requestId =
-    request.headers.get("x-request-id") ?? crypto.randomUUID();
-  const session = await auth();
-  const actorUserId = session?.user?.id ?? null;
+  if (!session) throw unauthorized();
 
-  return runWithRequestContext(
-    { requestId, actorUserId, route: "/api/me/identifiers/[type]" },
-    async () => {
-      // ----- 1. Authenticate -----
+  const userId = session.user.id;
 
-      if (!session?.user?.id) {
-        logWarn("identifier.delete.unauthorized");
-        return NextResponse.json(
-          { error: "Authentication required" },
-          { status: 401 },
-        );
-      }
-
-      const userId = session.user.id;
-      const { type } = await params;
-
-      // ----- 2. Validate type parameter -----
-
-      if (!(ALLOWED_TYPES as readonly string[]).includes(type)) {
-        return NextResponse.json(
-          { error: `type must be one of: ${ALLOWED_TYPES.join(", ")}` },
-          { status: 400 },
-        );
-      }
-
-      // ----- 3. Delete identifier -----
-
-      await deleteUserIdentifier(userId, type);
-
-      // ----- 4. Audit log -----
-
-      logInfo("identifier_removed", { userId, type });
-
-      return NextResponse.json({ success: true }, { status: 200 });
-    },
+  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const allowed = await rateLimiter.check(
+    `identifier-delete:${userId}:${ip}`,
+    10,
+    60_000,
   );
+  if (!allowed) throw rateLimited();
+
+  const { type } = await context.params;
+
+  if (!(ALLOWED_TYPES as readonly string[]).includes(type)) {
+    throw badRequest(
+      `type must be one of: ${ALLOWED_TYPES.join(", ")}`,
+      "INVALID_IDENTIFIER_TYPE",
+    );
+  }
+
+  await deleteUserIdentifier(userId, type);
+
+  logInfo("identifier_removed", { userId, type });
+
+  return NextResponse.json({ success: true }, { status: 200 });
 }
+
+export const DELETE = withApiHandler(handler);

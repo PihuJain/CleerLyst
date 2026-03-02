@@ -21,6 +21,8 @@ import { auth } from "@/lib/auth";
 //   • Client response NEVER contains stack traces or internal details.
 //   • Unknown errors always return generic "Something went wrong."
 //   • isOperational=false triggers error-level logging (alerting-grade).
+//   • In production: non-operational 500 errors ALWAYS mask the message.
+//   • In development: detailed AppError messages are shown for debugging.
 //
 // Usage:
 //   async function handler(req: NextRequest, session, ctx) { ... }
@@ -28,7 +30,7 @@ import { auth } from "@/lib/auth";
 //
 // ---------------------------------------------------------------------------
 
-interface HandlerSession {
+export interface HandlerSession {
   user: {
     id: string;
     role: "student" | "admin";
@@ -38,18 +40,24 @@ interface HandlerSession {
   };
 }
 
-type RouteContext = { params: Promise<Record<string, string>> };
+export type RouteContext = { params: Promise<Record<string, string>> };
 
 type ApiHandler = (
   request: NextRequest,
   session: HandlerSession | null,
-  context?: RouteContext,
+  context: RouteContext,
 ) => Promise<NextResponse>;
+
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+const GENERIC_500 = {
+  error: { message: "Something went wrong.", code: "INTERNAL_ERROR" },
+} as const;
 
 export function withApiHandler(handler: ApiHandler) {
   return async (
     request: NextRequest,
-    routeContext?: RouteContext,
+    routeContext: RouteContext,
   ): Promise<NextResponse> => {
     const requestId =
       request.headers.get("x-request-id") ?? crypto.randomUUID();
@@ -78,6 +86,11 @@ export function withApiHandler(handler: ApiHandler) {
 
             if (err.statusCode >= 500 || !err.isOperational) {
               logError("api.error", meta, err);
+
+              // In production, mask non-operational 500s
+              if (IS_PRODUCTION) {
+                return NextResponse.json(GENERIC_500, { status: 500 });
+              }
             } else {
               logWarn("api.client_error", meta);
             }
@@ -97,15 +110,19 @@ export function withApiHandler(handler: ApiHandler) {
             err,
           );
 
-          return NextResponse.json(
-            {
-              error: {
-                message: "Something went wrong.",
-                code: "INTERNAL_ERROR",
+          if (!IS_PRODUCTION && err instanceof Error) {
+            return NextResponse.json(
+              {
+                error: {
+                  message: err.message,
+                  code: "INTERNAL_ERROR",
+                },
               },
-            },
-            { status: 500 },
-          );
+              { status: 500 },
+            );
+          }
+
+          return NextResponse.json(GENERIC_500, { status: 500 });
         }
       },
     );
