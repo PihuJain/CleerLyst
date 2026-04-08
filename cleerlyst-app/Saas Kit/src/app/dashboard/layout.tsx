@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { DashboardClient } from "@/components/dashboard/dashboard-client";
-import { saveUserToDatabase } from "@/lib/user-actions";
 
 export const runtime = 'nodejs';
 
@@ -16,15 +15,9 @@ export default async function DashboardLayout({
     redirect("/auth/signin");
   }
 
-  // Save user to database when they access the dashboard
-  try {
-    await saveUserToDatabase();
-  } catch (error) {
-    console.error("Failed to save user to database:", error);
-    // Continue even if database save fails
-  }
+  // User provisioning happens in the NextAuth signIn callback (src/lib/auth.ts).
+  // No separate DB write needed here.
 
   return <DashboardClient session={session}>{children}</DashboardClient>
 }
-
 
