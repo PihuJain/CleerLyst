@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { getDatasetById, revokeDataset } from "@/lib/database";
-import { logInfo, logWarn, logError } from "@/lib/logger";
-import { runWithRequestContext } from "@/lib/request-context";
+import { logInfo, logError } from "@/lib/logger";
+import {
+  withApiHandler,
+  type HandlerSession,
+  type RouteContext,
+} from "@/lib/api-handler";
+import {
+  unauthorized,
+  forbidden,
+  badRequest,
+  notFound,
+  rateLimited,
+  internalError,
+} from "@/lib/errors";
+import { rateLimiter } from "@/lib/rate-limiter";
 
 export const runtime = "nodejs";
 
@@ -23,84 +35,59 @@ export const runtime = "nodejs";
 //
 // ---------------------------------------------------------------------------
 
-export async function POST(
+async function handler(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  session: HandlerSession | null,
+  context: RouteContext,
 ) {
-  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
-  const session = await auth();
-  const actorUserId = session?.user?.id ?? null;
+  if (!session) throw unauthorized();
+  if (session.user.role !== "admin") throw forbidden("Admin access required");
 
-  return runWithRequestContext(
-    { requestId, actorUserId, route: "/api/admin/datasets/[id]/revoke" },
-    async () => {
-      // ----- 1. Admin authentication -----
+  const adminUserId = session.user.id;
+  const adminInstituteId = session.user.instituteId;
 
-      if (!session?.user?.id || session.user.role !== "admin") {
-        logWarn("dataset.revoke.forbidden", { reason: "not_admin" });
-        return NextResponse.json(
-          { error: "Admin access required" },
-          { status: 403 },
-        );
-      }
-
-      const adminUserId = session.user.id;
-      const adminInstituteId = session.user.instituteId;
-      const { id: datasetId } = await params;
-
-      // ----- 2. Fetch dataset + verify institute ownership -----
-
-      const dataset = await getDatasetById(datasetId);
-
-      if (!dataset) {
-        logWarn("dataset.revoke.not_found", { datasetId });
-        return NextResponse.json(
-          { error: "Dataset not found" },
-          { status: 404 },
-        );
-      }
-
-      if (dataset.institute_id !== adminInstituteId) {
-        logWarn("dataset.revoke.forbidden", { datasetId, reason: "wrong_institute" });
-        return NextResponse.json(
-          { error: "Dataset does not belong to your institute" },
-          { status: 403 },
-        );
-      }
-
-      // ----- 3. LIFECYCLE CHECK: only published datasets can be revoked -----
-
-      if (dataset.status !== "published") {
-        logWarn("dataset.revoke.wrong_status", {
-          datasetId,
-          status: dataset.status,
-        });
-        return NextResponse.json(
-          { error: "cannot_revoke_non_published_dataset" },
-          { status: 400 },
-        );
-      }
-
-      // ----- 4. Revoke (transactional: status update + audit log) -----
-
-      let result: { id: string; status: string };
-      try {
-        result = await revokeDataset(datasetId, adminUserId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Revoke failed";
-        logError("dataset.revoke.error", { datasetId, message });
-        return NextResponse.json({ error: message }, { status: 400 });
-      }
-
-      // ----- 5. Build response — no institute_id, no title, no published_at -----
-
-      logInfo("dataset.revoke.success", { datasetId });
-
-      return NextResponse.json({
-        success: true,
-        dataset_id: result.id,
-        status: result.status,
-      });
-    },
+  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const rlAllowed = await rateLimiter.check(
+    `admin-revoke:${adminUserId}:${ip}`,
+    20,
+    60_000,
   );
+  if (!rlAllowed) throw rateLimited();
+
+  const { id: datasetId } = await context.params;
+
+  const dataset = await getDatasetById(datasetId);
+  if (!dataset) throw notFound("Dataset not found");
+
+  if (dataset.institute_id !== adminInstituteId) {
+    throw forbidden("Dataset does not belong to your institute");
+  }
+
+  if (dataset.status !== "published") {
+    throw badRequest(
+      "cannot_revoke_non_published_dataset",
+      "CANNOT_REVOKE_NON_PUBLISHED",
+    );
+  }
+
+  let result: { id: string; status: string };
+  try {
+    result = await revokeDataset(datasetId, adminUserId);
+  } catch (err) {
+    logError("dataset.revoke.error", { datasetId }, err);
+    throw badRequest(
+      err instanceof Error ? err.message : "Revoke failed",
+      "REVOKE_FAILED",
+    );
+  }
+
+  logInfo("dataset.revoke.success", { datasetId });
+
+  return NextResponse.json({
+    success: true,
+    dataset_id: result.id,
+    status: result.status,
+  });
 }
+
+export const POST = withApiHandler(handler);

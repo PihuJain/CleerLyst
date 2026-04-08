@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { markNotificationRead } from "@/lib/database";
-import { logWarn } from "@/lib/logger";
-import { runWithRequestContext } from "@/lib/request-context";
+import {
+  withApiHandler,
+  type HandlerSession,
+  type RouteContext,
+} from "@/lib/api-handler";
+import { unauthorized, rateLimited } from "@/lib/errors";
 import { rateLimiter } from "@/lib/rate-limiter";
 
 export const runtime = "nodejs";
@@ -22,61 +25,35 @@ export const runtime = "nodejs";
 //
 // ---------------------------------------------------------------------------
 
-export async function PATCH(
+async function handler(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  session: HandlerSession | null,
+  context: RouteContext,
 ) {
-  const requestId =
-    request.headers.get("x-request-id") ?? crypto.randomUUID();
-  const session = await auth();
-  const actorUserId = session?.user?.id ?? null;
+  if (!session) throw unauthorized();
 
-  return runWithRequestContext(
-    { requestId, actorUserId, route: "/api/me/notifications/[id]/read" },
-    async () => {
-      // ----- 1. Authenticate -----
+  const userId = session.user.id;
 
-      if (!session?.user?.id) {
-        return NextResponse.json(
-          { error: "Authentication required" },
-          { status: 401 },
-        );
-      }
+  const { id: notificationId } = await context.params;
 
-      const userId = session.user.id;
-      const { id: notificationId } = await params;
-
-      // ----- 2. Rate limit -----
-
-      const ip = request.headers.get("x-forwarded-for") ?? "unknown";
-      const allowed = await rateLimiter.check(
-        `notification-read:${userId}:${ip}`,
-        120,
-        60_000,
-      );
-
-      if (!allowed) {
-        logWarn("notification.read.rate_limited");
-        return NextResponse.json(
-          { error: "Too many requests" },
-          { status: 429 },
-        );
-      }
-
-      // ----- 3. Mark as read -----
-
-      const updated = await markNotificationRead(notificationId, userId);
-
-      if (!updated) {
-        // Could be: already read, wrong user, or doesn't exist.
-        // Uniform response — no information leakage.
-        return NextResponse.json(
-          { success: false, message: "No change" },
-          { status: 200 },
-        );
-      }
-
-      return NextResponse.json({ success: true }, { status: 200 });
-    },
+  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const allowed = await rateLimiter.check(
+    `notification-read:${userId}:${ip}`,
+    120,
+    60_000,
   );
+  if (!allowed) throw rateLimited();
+
+  const updated = await markNotificationRead(notificationId, userId);
+
+  if (!updated) {
+    return NextResponse.json(
+      { success: false, message: "No change" },
+      { status: 200 },
+    );
+  }
+
+  return NextResponse.json({ success: true }, { status: 200 });
 }
+
+export const PATCH = withApiHandler(handler);

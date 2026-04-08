@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import {
   getDatasetById,
   getInstituteById,
@@ -10,12 +9,20 @@ import {
 import { hashIdentifier } from "@/lib/identifier";
 import { encryptPayload, toBuffer } from "@/lib/encryption";
 import { parseFile, type ParsedRow } from "@/lib/file-parser";
-import { logInfo, logWarn, logError } from "@/lib/logger";
-import { runWithRequestContext } from "@/lib/request-context";
+import { logInfo, logError } from "@/lib/logger";
+import { withApiHandler, type HandlerSession } from "@/lib/api-handler";
+import {
+  unauthorized,
+  forbidden,
+  badRequest,
+  notFound,
+  rateLimited,
+  internalError,
+} from "@/lib/errors";
+import { rateLimiter } from "@/lib/rate-limiter";
 
 export const runtime = "nodejs";
 
-// Max file size: 10 MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
@@ -29,381 +36,309 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 //
 // Processing:
 //   1. Verify admin session + institute ownership
-//   2. Enforce draft-only upload (PROMPT 3)
-//   3. Enforce single upload per dataset — schema lock (PROMPT 4)
+//   2. Enforce draft-only upload
+//   3. Enforce single upload per dataset — schema lock
 //   4. Parse file entirely in memory (never touches disk)
-//   5. Canonicalize headers, exclude identifier column (PROMPT 7)
-//   6. Hash identifiers, detect in-file duplicates (PROMPT 5)
+//   5. Canonicalize headers, exclude identifier column
+//   6. Hash identifiers, detect in-file duplicates
 //   7. Encrypt payloads
-//   8. Batch-insert rows + persist headers in single TX (PROMPT 6)
-//   9. ON CONFLICT DO NOTHING with mismatch detection (PROMPT 8)
+//   8. Batch-insert rows + persist headers in single TX
+//   9. ON CONFLICT DO NOTHING with mismatch detection
 //  10. Audit log (counts only, never row data)
 //
 // Returns only { inserted, skipped } — NEVER the rows themselves.
 // ---------------------------------------------------------------------------
 
-export async function POST(request: NextRequest) {
-  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
-  const session = await auth();
-  const actorUserId = session?.user?.id ?? null;
+async function handler(
+  request: NextRequest,
+  session: HandlerSession | null,
+) {
+  if (!session) throw unauthorized();
+  if (session.user.role !== "admin") throw forbidden("Admin access required");
 
-  return runWithRequestContext(
-    { requestId, actorUserId, route: "/api/admin/datasets/upload" },
-    async () => {
-      // ----- 1. Admin authentication -----
+  const adminUserId = session.user.id;
+  const adminInstituteId = session.user.instituteId;
 
-      if (!session?.user?.id || session.user.role !== "admin") {
-        logWarn("dataset.upload.forbidden", { reason: "not_admin" });
-        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-      }
-
-      const adminUserId = session.user.id;
-      const adminInstituteId = session.user.instituteId;
-
-      // ----- 2. Parse multipart form data -----
-
-      let formData: FormData;
-      try {
-        formData = await request.formData();
-      } catch {
-        return NextResponse.json(
-          { error: "Invalid multipart form data" },
-          { status: 400 },
-        );
-      }
-
-      const file = formData.get("file");
-      const datasetId = formData.get("datasetId");
-      const identifierColumnRaw = formData.get("identifierColumn");
-
-      if (!(file instanceof File)) {
-        return NextResponse.json({ error: "Missing file" }, { status: 400 });
-      }
-      if (typeof datasetId !== "string" || !datasetId.trim()) {
-        return NextResponse.json({ error: "Missing datasetId" }, { status: 400 });
-      }
-
-      // identifierColumn is required for restricted datasets, ignored for public
-      const identifierColumn =
-        typeof identifierColumnRaw === "string"
-          ? identifierColumnRaw.trim()
-          : "";
-
-      if (file.size > MAX_FILE_SIZE) {
-        return NextResponse.json(
-          { error: `File exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024} MB` },
-          { status: 400 },
-        );
-      }
-
-      // ----- 3. Validate dataset + institute ownership -----
-
-      const dataset = await getDatasetById(datasetId.trim());
-      if (!dataset) {
-        return NextResponse.json({ error: "Dataset not found" }, { status: 404 });
-      }
-
-      if (dataset.institute_id !== adminInstituteId) {
-        logWarn("dataset.upload.forbidden", { datasetId: datasetId.trim(), reason: "wrong_institute" });
-        return NextResponse.json(
-          { error: "Dataset does not belong to your institute" },
-          { status: 403 },
-        );
-      }
-
-      // ----- 4. PROMPT 3: Enforce draft-only upload -----
-      //
-      // Only draft datasets accept uploads.
-      // Published and revoked datasets are permanently locked.
-
-      if (dataset.status !== "draft") {
-        logWarn("dataset.upload.rejected", {
-          datasetId: datasetId.trim(),
-          reason: "upload_locked",
-          status: dataset.status,
-        });
-        await insertAuditLog(adminUserId, "dataset.upload.blocked", dataset.id, {
-          reason: "upload_locked",
-          status: dataset.status,
-        }).catch(() => {});
-        return NextResponse.json({ error: "upload_locked" }, { status: 400 });
-      }
-
-      // ----- 5. PROMPT 4: Enforce single upload per dataset (schema lock) -----
-      //
-      // If headers are already populated, the schema is locked.
-      // A second upload to the same dataset is forbidden.
-
-      const existingHeaders = Array.isArray(dataset.headers) ? dataset.headers : [];
-      if (existingHeaders.length > 0) {
-        logWarn("dataset.upload.schema_locked", { datasetId: datasetId.trim() });
-        await insertAuditLog(adminUserId, "dataset.upload.blocked", dataset.id, {
-          reason: "dataset_schema_locked",
-        }).catch(() => {});
-        return NextResponse.json({ error: "dataset_schema_locked" }, { status: 400 });
-      }
-
-      const isPublic = dataset.audience_type === "public";
-
-      // ----- Public dataset hard guards -----
-
-      if (isPublic && dataset.identifier_type !== null) {
-        return NextResponse.json(
-          { error: "public_dataset_cannot_require_identifier" },
-          { status: 400 },
-        );
-      }
-
-      // Restricted datasets require identifierColumn
-      if (!isPublic && !identifierColumn) {
-        return NextResponse.json(
-          { error: "Missing identifierColumn" },
-          { status: 400 },
-        );
-      }
-
-      // Fetch institute for the salt (restricted datasets need it for hashing)
-      const institute = await getInstituteById(dataset.institute_id);
-      if (!institute) {
-        return NextResponse.json(
-          { error: "Institute not found" },
-          { status: 500 },
-        );
-      }
-
-      // ----- 6. Read file into memory, parse, then destroy buffer -----
-
-      let rawBuffer: ArrayBuffer | null = await file.arrayBuffer();
-      let parsed: { headers: string[]; rows: ParsedRow[] };
-
-      try {
-        parsed = parseFile(rawBuffer, file.type || file.name);
-      } catch (err) {
-        rawBuffer = null;
-        const message = err instanceof Error ? err.message : "File parse error";
-        return NextResponse.json({ error: message }, { status: 400 });
-      }
-
-      rawBuffer = null;
-
-      if (parsed.rows.length === 0) {
-        return NextResponse.json(
-          { error: "File contains no data rows" },
-          { status: 400 },
-        );
-      }
-
-      // ----- Public dataset: enforce single row, no identifier column -----
-
-      if (isPublic) {
-        if (parsed.rows.length !== 1) {
-          return NextResponse.json(
-            { error: "public_dataset_must_have_single_row" },
-            { status: 400 },
-          );
-        }
-
-        if (identifierColumn && parsed.headers.includes(identifierColumn)) {
-          return NextResponse.json(
-            { error: "public_dataset_cannot_have_identifier_column" },
-            { status: 400 },
-          );
-        }
-
-        const canonicalHeaders = parsed.headers
-          .map((h) => h.trim())
-          .filter(Boolean);
-
-        const row = parsed.rows[0];
-        const payload: Record<string, string> = {};
-        for (const key of parsed.headers) {
-          payload[key] = row[key] ?? "";
-        }
-
-        const encrypted = encryptPayload(payload);
-        const payloadBuffer = toBuffer(encrypted);
-
-        const insertRows: RecordInsertRow[] = [
-          {
-            identifierHash: "__public__",
-            encryptedPayload: payloadBuffer,
-          },
-        ];
-
-        parsed.rows.length = 0;
-
-        let inserted: number;
-        try {
-          inserted = await insertRecordsBatch(dataset.id, insertRows, canonicalHeaders);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Database insert failed";
-          logError("dataset.upload.insert_error", { datasetId: dataset.id, message });
-          return NextResponse.json(
-            { error: "Database insert failed — no records were saved" },
-            { status: 500 },
-          );
-        }
-
-        try {
-          await insertAuditLog(adminUserId, "dataset.records_uploaded", dataset.id, {
-            inserted,
-            skipped: 0,
-            headerCount: canonicalHeaders.length,
-            audience_type: "public",
-            fileName: file.name,
-            fileSizeBytes: file.size,
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Audit log write failed";
-          logError("dataset.upload.audit_error", { datasetId: dataset.id, message });
-        }
-
-        logInfo("dataset.upload.success", {
-          datasetId: dataset.id,
-          inserted,
-          skipped: 0,
-          headerCount: canonicalHeaders.length,
-          audience_type: "public",
-        });
-
-        return NextResponse.json({ success: true, inserted, skipped: 0 });
-      }
-
-      // ----- Restricted dataset processing (existing logic) -----
-
-      // ----- 7. Validate identifier column exists -----
-
-      const colName = identifierColumn;
-      if (!parsed.headers.includes(colName)) {
-        return NextResponse.json(
-          {
-            error: `Column "${colName}" not found in file. Available columns: ${parsed.headers.join(", ")}`,
-          },
-          { status: 400 },
-        );
-      }
-
-      // ----- 8. Canonicalize headers, exclude identifier column -----
-
-      const canonicalHeaders = parsed.headers
-        .map((h) => h.trim())
-        .filter(Boolean)
-        .filter((h) => h !== colName);
-
-      // ----- 9. Hash identifiers + detect in-file duplicates -----
-
-      const insertRows: RecordInsertRow[] = [];
-      const seenHashes = new Set<string>();
-      let skipped = 0;
-
-      for (const row of parsed.rows) {
-        const identifierValue = row[colName];
-
-        if (!identifierValue || identifierValue.trim() === "") {
-          skipped++;
-          continue;
-        }
-
-        const identHash = hashIdentifier(identifierValue.trim(), institute.id);
-
-        if (seenHashes.has(identHash)) {
-          logWarn("dataset.upload.duplicate_in_file", {
-            datasetId: dataset.id,
-            duplicateRow: insertRows.length + skipped + 1,
-          });
-          return NextResponse.json(
-            { error: "duplicate_identifiers_in_file" },
-            { status: 400 },
-          );
-        }
-        seenHashes.add(identHash);
-
-        const payload: Record<string, string> = {};
-        for (const key of parsed.headers) {
-          if (key !== colName) {
-            payload[key] = row[key] ?? "";
-          }
-        }
-
-        const encrypted = encryptPayload(payload);
-        const payloadBuffer = toBuffer(encrypted);
-
-        insertRows.push({
-          identifierHash: identHash,
-          encryptedPayload: payloadBuffer,
-        });
-      }
-
-      parsed.rows.length = 0;
-
-      if (insertRows.length === 0) {
-        return NextResponse.json(
-          { error: "No valid rows to insert (all identifiers were empty)" },
-          { status: 400 },
-        );
-      }
-
-      // ----- 10. PROMPT 6+7+8: Batch insert + persist headers (single TX) -----
-      //
-      // insertRecordsBatch now:
-      //   • Uses ON CONFLICT (dataset_id, identifier_hash) DO NOTHING
-      //   • Compares inserted vs expected — ROLLBACK on mismatch
-      //   • Persists canonicalHeaders in datasets.headers
-      //   • All inside a single transaction — no partial writes
-
-      let inserted: number;
-      try {
-        inserted = await insertRecordsBatch(dataset.id, insertRows, canonicalHeaders);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Database insert failed";
-
-        // Surface the specific duplicate error from PROMPT 8
-        if (message === "duplicate_identifiers_in_dataset") {
-          logWarn("dataset.upload.duplicate_in_dataset", { datasetId: dataset.id });
-          return NextResponse.json(
-            { error: "duplicate_identifiers_in_dataset" },
-            { status: 400 },
-          );
-        }
-
-        logError("dataset.upload.insert_error", { datasetId: dataset.id, message });
-        return NextResponse.json(
-          { error: "Database insert failed — no records were saved" },
-          { status: 500 },
-        );
-      }
-
-      // ----- 11. Audit log (counts only — NEVER row data) -----
-
-      try {
-        await insertAuditLog(adminUserId, "dataset.records_uploaded", dataset.id, {
-          inserted,
-          skipped,
-          headerCount: canonicalHeaders.length,
-          identifierColumn: colName,
-          fileName: file.name,
-          fileSizeBytes: file.size,
-        });
-      } catch (err) {
-        // Audit failure must not undo the insert — log and continue
-        const message = err instanceof Error ? err.message : "Audit log write failed";
-        logError("dataset.upload.audit_error", { datasetId: dataset.id, message });
-      }
-
-      // ----- 12. Return counts only — NEVER return rows -----
-
-      logInfo("dataset.upload.success", {
-        datasetId: dataset.id,
-        inserted,
-        skipped,
-        headerCount: canonicalHeaders.length,
-      });
-
-      return NextResponse.json({
-        success: true,
-        inserted,
-        skipped,
-      });
-    },
+  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const allowed = await rateLimiter.check(
+    `admin-upload:${adminUserId}:${ip}`,
+    10,
+    60_000,
   );
+  if (!allowed) throw rateLimited();
+
+  // ----- Parse multipart form data -----
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    throw badRequest("Invalid multipart form data", "INVALID_FORM_DATA");
+  }
+
+  const file = formData.get("file");
+  const datasetId = formData.get("datasetId");
+  const identifierColumnRaw = formData.get("identifierColumn");
+
+  if (!(file instanceof File)) {
+    throw badRequest("Missing file", "MISSING_FILE");
+  }
+  if (typeof datasetId !== "string" || !datasetId.trim()) {
+    throw badRequest("Missing datasetId", "MISSING_DATASET_ID");
+  }
+
+  const identifierColumn =
+    typeof identifierColumnRaw === "string"
+      ? identifierColumnRaw.trim()
+      : "";
+
+  if (file.size > MAX_FILE_SIZE) {
+    throw badRequest(
+      `File exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024} MB`,
+      "FILE_TOO_LARGE",
+    );
+  }
+
+  // ----- Validate dataset + institute ownership -----
+
+  const dataset = await getDatasetById(datasetId.trim());
+  if (!dataset) throw notFound("Dataset not found");
+
+  if (dataset.institute_id !== adminInstituteId) {
+    throw forbidden("Dataset does not belong to your institute");
+  }
+
+  // ----- Enforce draft-only upload -----
+
+  if (dataset.status !== "draft") {
+    await insertAuditLog(adminUserId, "dataset.upload.blocked", dataset.id, {
+      reason: "upload_locked",
+      status: dataset.status,
+    }).catch(() => {});
+    throw badRequest("upload_locked", "UPLOAD_LOCKED");
+  }
+
+  // ----- Enforce single upload per dataset (schema lock) -----
+
+  const existingHeaders = Array.isArray(dataset.headers) ? dataset.headers : [];
+  if (existingHeaders.length > 0) {
+    await insertAuditLog(adminUserId, "dataset.upload.blocked", dataset.id, {
+      reason: "dataset_schema_locked",
+    }).catch(() => {});
+    throw badRequest("dataset_schema_locked", "SCHEMA_LOCKED");
+  }
+
+  const isPublic = dataset.audience_type === "public";
+
+  // ----- Public dataset hard guards -----
+
+  if (isPublic && dataset.identifier_type !== null) {
+    throw badRequest(
+      "public_dataset_cannot_require_identifier",
+      "PUBLIC_DATASET_CANNOT_REQUIRE_IDENTIFIER",
+    );
+  }
+
+  if (!isPublic && !identifierColumn) {
+    throw badRequest("Missing identifierColumn", "MISSING_IDENTIFIER_COLUMN");
+  }
+
+  const institute = await getInstituteById(dataset.institute_id);
+  if (!institute) throw internalError("Institute not found");
+
+  // ----- Read file into memory, parse, then destroy buffer -----
+
+  let rawBuffer: ArrayBuffer | null = await file.arrayBuffer();
+  let parsed: { headers: string[]; rows: ParsedRow[] };
+
+  try {
+    parsed = parseFile(rawBuffer, file.type || file.name);
+  } catch (err) {
+    rawBuffer = null;
+    throw badRequest(
+      err instanceof Error ? err.message : "File parse error",
+      "FILE_PARSE_ERROR",
+    );
+  }
+
+  rawBuffer = null;
+
+  if (parsed.rows.length === 0) {
+    throw badRequest("File contains no data rows", "EMPTY_FILE");
+  }
+
+  // ===== PUBLIC DATASET PATH =====
+
+  if (isPublic) {
+    if (parsed.rows.length !== 1) {
+      throw badRequest(
+        "public_dataset_must_have_single_row",
+        "PUBLIC_DATASET_MUST_HAVE_SINGLE_ROW",
+      );
+    }
+
+    if (identifierColumn && parsed.headers.includes(identifierColumn)) {
+      throw badRequest(
+        "public_dataset_cannot_have_identifier_column",
+        "PUBLIC_DATASET_CANNOT_HAVE_IDENTIFIER_COLUMN",
+      );
+    }
+
+    const canonicalHeaders = parsed.headers
+      .map((h) => h.trim())
+      .filter(Boolean);
+
+    const row = parsed.rows[0];
+    const payload: Record<string, string> = {};
+    for (const key of parsed.headers) {
+      payload[key] = row[key] ?? "";
+    }
+
+    const encrypted = encryptPayload(payload);
+    const payloadBuffer = toBuffer(encrypted);
+
+    const insertRows: RecordInsertRow[] = [
+      { identifierHash: "__public__", encryptedPayload: payloadBuffer },
+    ];
+
+    parsed.rows.length = 0;
+
+    let inserted: number;
+    try {
+      inserted = await insertRecordsBatch(dataset.id, insertRows, canonicalHeaders);
+    } catch (err) {
+      logError("dataset.upload.insert_error", { datasetId: dataset.id }, err);
+      throw internalError("Database insert failed — no records were saved");
+    }
+
+    try {
+      await insertAuditLog(adminUserId, "dataset.records_uploaded", dataset.id, {
+        inserted,
+        skipped: 0,
+        headerCount: canonicalHeaders.length,
+        audience_type: "public",
+        fileName: file.name,
+        fileSizeBytes: file.size,
+      });
+    } catch (err) {
+      logError("dataset.upload.audit_error", { datasetId: dataset.id }, err);
+    }
+
+    logInfo("dataset.upload.success", {
+      datasetId: dataset.id,
+      inserted,
+      skipped: 0,
+      headerCount: canonicalHeaders.length,
+      audience_type: "public",
+    });
+
+    return NextResponse.json({ success: true, inserted, skipped: 0 });
+  }
+
+  // ===== RESTRICTED DATASET PATH =====
+
+  const colName = identifierColumn;
+  if (!parsed.headers.includes(colName)) {
+    throw badRequest(
+      `Column "${colName}" not found in file. Available columns: ${parsed.headers.join(", ")}`,
+      "IDENTIFIER_COLUMN_NOT_FOUND",
+    );
+  }
+
+  const canonicalHeaders = parsed.headers
+    .map((h) => h.trim())
+    .filter(Boolean)
+    .filter((h) => h !== colName);
+
+  const insertRows: RecordInsertRow[] = [];
+  const seenHashes = new Set<string>();
+  let skipped = 0;
+
+  for (const row of parsed.rows) {
+    const identifierValue = row[colName];
+
+    if (!identifierValue || identifierValue.trim() === "") {
+      skipped++;
+      continue;
+    }
+
+    const identHash = hashIdentifier(identifierValue.trim(), institute.id);
+
+    if (seenHashes.has(identHash)) {
+      throw badRequest(
+        "duplicate_identifiers_in_file",
+        "DUPLICATE_IDENTIFIERS_IN_FILE",
+      );
+    }
+    seenHashes.add(identHash);
+
+    const payload: Record<string, string> = {};
+    for (const key of parsed.headers) {
+      if (key !== colName) {
+        payload[key] = row[key] ?? "";
+      }
+    }
+
+    const encrypted = encryptPayload(payload);
+    const payloadBuffer = toBuffer(encrypted);
+
+    insertRows.push({
+      identifierHash: identHash,
+      encryptedPayload: payloadBuffer,
+    });
+  }
+
+  parsed.rows.length = 0;
+
+  if (insertRows.length === 0) {
+    throw badRequest(
+      "No valid rows to insert (all identifiers were empty)",
+      "NO_VALID_ROWS",
+    );
+  }
+
+  // ----- Batch insert + persist headers (single TX) -----
+
+  let inserted: number;
+  try {
+    inserted = await insertRecordsBatch(dataset.id, insertRows, canonicalHeaders);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+
+    if (message === "duplicate_identifiers_in_dataset") {
+      throw badRequest(
+        "duplicate_identifiers_in_dataset",
+        "DUPLICATE_IDENTIFIERS_IN_DATASET",
+      );
+    }
+
+    logError("dataset.upload.insert_error", { datasetId: dataset.id }, err);
+    throw internalError("Database insert failed — no records were saved");
+  }
+
+  // ----- Audit log (counts only — NEVER row data) -----
+
+  try {
+    await insertAuditLog(adminUserId, "dataset.records_uploaded", dataset.id, {
+      inserted,
+      skipped,
+      headerCount: canonicalHeaders.length,
+      identifierColumn: colName,
+      fileName: file.name,
+      fileSizeBytes: file.size,
+    });
+  } catch (err) {
+    logError("dataset.upload.audit_error", { datasetId: dataset.id }, err);
+  }
+
+  logInfo("dataset.upload.success", {
+    datasetId: dataset.id,
+    inserted,
+    skipped,
+    headerCount: canonicalHeaders.length,
+  });
+
+  return NextResponse.json({ success: true, inserted, skipped });
 }
+
+export const POST = withApiHandler(handler);

@@ -1133,8 +1133,8 @@ export async function createDataset(
     const result = await client.query<CreateDatasetResult>(
       `INSERT INTO datasets
          (institute_id, created_by, type, title, description,
-          identifier_type, audience_type, status, visibility_config)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', '{}'::jsonb)
+          identifier_type, audience_type, status, visibility_config, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', '{}'::jsonb, $8)
        RETURNING id, title, status, created_at`,
       [
         input.instituteId,
@@ -1144,6 +1144,7 @@ export async function createDataset(
         input.description,
         input.identifierType,
         input.audienceType,
+        input.expiresAt,
       ],
     );
 

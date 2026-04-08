@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { getDatasetById, publishDataset } from "@/lib/database";
 import { config } from "@/lib/config";
-import { logInfo, logWarn, logError } from "@/lib/logger";
-import { runWithRequestContext } from "@/lib/request-context";
+import { logInfo, logError } from "@/lib/logger";
+import {
+  withApiHandler,
+  type HandlerSession,
+  type RouteContext,
+} from "@/lib/api-handler";
+import {
+  unauthorized,
+  forbidden,
+  badRequest,
+  notFound,
+  rateLimited,
+  internalError,
+} from "@/lib/errors";
+import { rateLimiter } from "@/lib/rate-limiter";
 
 export const runtime = "nodejs";
 
@@ -22,123 +34,85 @@ export const runtime = "nodejs";
 //
 // ---------------------------------------------------------------------------
 
-export async function POST(
+async function handler(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  session: HandlerSession | null,
+  context: RouteContext,
 ) {
-  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
-  const session = await auth();
-  const actorUserId = session?.user?.id ?? null;
+  if (!session) throw unauthorized();
+  if (session.user.role !== "admin") throw forbidden("Admin access required");
 
-  return runWithRequestContext(
-    { requestId, actorUserId, route: "/api/admin/datasets/[id]/publish" },
-    async () => {
-      // ----- 1. Admin authentication -----
+  const adminUserId = session.user.id;
+  const adminInstituteId = session.user.instituteId;
 
-      if (!session?.user?.id || session.user.role !== "admin") {
-        logWarn("dataset.publish.forbidden", { reason: "not_admin" });
-        return NextResponse.json(
-          { error: "Admin access required" },
-          { status: 403 },
-        );
-      }
-
-      const adminUserId = session.user.id;
-      const adminInstituteId = session.user.instituteId;
-      const { id: datasetId } = await params;
-
-      // ----- 2. Fetch dataset + verify institute ownership -----
-
-      const dataset = await getDatasetById(datasetId);
-
-      if (!dataset) {
-        logWarn("dataset.publish.not_found", { datasetId });
-        return NextResponse.json(
-          { error: "Dataset not found" },
-          { status: 404 },
-        );
-      }
-
-      if (dataset.institute_id !== adminInstituteId) {
-        logWarn("dataset.publish.forbidden", { datasetId, reason: "wrong_institute" });
-        return NextResponse.json(
-          { error: "Dataset does not belong to your institute" },
-          { status: 403 },
-        );
-      }
-
-      // ----- 3. LIFECYCLE CHECK: must be draft -----
-
-      if (dataset.status !== "draft") {
-        logWarn("dataset.publish.wrong_status", {
-          datasetId,
-          status: dataset.status,
-        });
-        return NextResponse.json(
-          { error: "Only draft datasets can be published" },
-          { status: 400 },
-        );
-      }
-
-      // ----- 4. PRECONDITION: headers must be non-empty (records uploaded) -----
-      //
-      // If headers is empty, no upload has occurred.
-      // Publishing a dataset with zero records is forbidden.
-
-      const headers = Array.isArray(dataset.headers) ? dataset.headers as string[] : [];
-
-      if (headers.length === 0) {
-        logWarn("dataset.publish.no_records_uploaded", { datasetId });
-        return NextResponse.json(
-          { error: "no_records_uploaded" },
-          { status: 400 },
-        );
-      }
-
-      // ----- 5. PRECONDITION: visibility_config.allowed_fields must be non-empty -----
-
-      const visConfig = dataset.visibility_config as {
-        allowed_fields?: string[];
-      } | null;
-
-      const allowedFields = visConfig?.allowed_fields;
-
-      if (
-        !Array.isArray(allowedFields) ||
-        allowedFields.length === 0
-      ) {
-        logWarn("dataset.publish.no_visible_fields", { datasetId });
-        return NextResponse.json(
-          { error: "no_visible_fields_selected" },
-          { status: 400 },
-        );
-      }
-
-      // ----- 6. Publish (transactional: status update + audit log) -----
-
-      let result: { id: string; title: string; published_at: Date };
-      try {
-        result = await publishDataset(datasetId, adminUserId, dataset.institute_id);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Publish failed";
-        logError("dataset.publish.error", { datasetId, message });
-        return NextResponse.json({ error: message }, { status: 400 });
-      }
-
-      // ----- 7. Build response -----
-
-      logInfo("dataset.publish.success", {
-        datasetId,
-        allowedFieldsCount: allowedFields.length,
-      });
-
-      return NextResponse.json({
-        success: true,
-        dataset_id: result.id,
-        title: result.title,
-        published_at: result.published_at.toISOString(),
-        universal_link: `${config.baseUrl}/datasets/${result.id}`,
-      });
-    },
+  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const rlAllowed = await rateLimiter.check(
+    `admin-publish:${adminUserId}:${ip}`,
+    20,
+    60_000,
   );
+  if (!rlAllowed) throw rateLimited();
+
+  const { id: datasetId } = await context.params;
+
+  const dataset = await getDatasetById(datasetId);
+  if (!dataset) throw notFound("Dataset not found");
+
+  if (dataset.institute_id !== adminInstituteId) {
+    throw forbidden("Dataset does not belong to your institute");
+  }
+
+  if (dataset.status !== "draft") {
+    throw badRequest(
+      "Only draft datasets can be published",
+      "DATASET_NOT_DRAFT",
+    );
+  }
+
+  const headers = Array.isArray(dataset.headers)
+    ? (dataset.headers as string[])
+    : [];
+
+  if (headers.length === 0) {
+    throw badRequest("no_records_uploaded", "NO_RECORDS_UPLOADED");
+  }
+
+  const visConfig = dataset.visibility_config as {
+    allowed_fields?: string[];
+  } | null;
+
+  const allowedFields = visConfig?.allowed_fields;
+
+  if (!Array.isArray(allowedFields) || allowedFields.length === 0) {
+    throw badRequest(
+      "no_visible_fields_selected",
+      "NO_VISIBLE_FIELDS_SELECTED",
+    );
+  }
+
+  let result: { id: string; title: string; published_at: Date };
+  try {
+    result = await publishDataset(datasetId, adminUserId, dataset.institute_id);
+  } catch (err) {
+    logError("dataset.publish.error", { datasetId }, err);
+    throw badRequest(
+      err instanceof Error ? err.message : "Publish failed",
+      "PUBLISH_FAILED",
+    );
+  }
+
+  logInfo("dataset.publish.success", {
+    datasetId,
+    allowedFieldsCount: allowedFields.length,
+  });
+
+  return NextResponse.json({
+    success: true,
+    dataset_id: result.id,
+    title: result.title,
+    published_at: result.published_at.toISOString(),
+    universal_link: `${config.baseUrl}/datasets/${result.id}`,
+  });
 }
+
+export const POST = withApiHandler(handler);

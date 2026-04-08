@@ -9,7 +9,7 @@ import {
 } from "@/lib/database";
 import { decryptPayload, fromBuffer } from "@/lib/encryption";
 import { logError } from "@/lib/logger";
-import { withApiHandler } from "@/lib/api-handler";
+import { withApiHandler, type HandlerSession } from "@/lib/api-handler";
 import { unauthorized, rateLimited } from "@/lib/errors";
 import { rateLimiter } from "@/lib/rate-limiter";
 
@@ -116,7 +116,7 @@ function decryptAndFilter(
 
 async function handler(
   request: NextRequest,
-  session: Parameters<Parameters<typeof withApiHandler>[1]>[1],
+  session: HandlerSession | null,
 ) {
   // ----- 1. Authenticate -----
 
@@ -230,7 +230,14 @@ async function handler(
         item.data = decryptAndFilter(buf, ds);
       }
     } else {
-      const userHashes = hashesForType.get(ds.identifier_type!) ?? [];
+      if (!ds.identifier_type) {
+        logError("feed.invariant_violation", {
+          datasetId: ds.id,
+          detail: "restricted dataset missing identifier_type",
+        });
+        continue;
+      }
+      const userHashes = hashesForType.get(ds.identifier_type) ?? [];
 
       if (userHashes.length === 0) {
         item.status = "missing_identifier";
