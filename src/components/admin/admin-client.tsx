@@ -13,10 +13,11 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import { UserButtonClient } from "@/components/auth/user-button-client"
+import type { Session } from "next-auth"
 
 interface AdminClientProps {
   children: React.ReactNode
-  adminUser: { name?: string | null; image?: string | null; role?: string }
+  adminUser: Session["user"]
 }
 
 const sidebarItems = [

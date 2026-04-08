@@ -16,6 +16,7 @@ import {
   LayoutList,
   Shield,
 } from "lucide-react"
+import type { Session } from "next-auth"
 
 const userItems = [
   { name: "Results", href: "/dashboard/feed", icon: LayoutList },
@@ -24,7 +25,7 @@ const userItems = [
 
 interface DashboardClientProps {
   children: React.ReactNode
-  session: { user?: { name?: string | null; image?: string | null; role?: string } }
+  session: Session
 }
 
 export function DashboardClient({ children, session }: DashboardClientProps) {
