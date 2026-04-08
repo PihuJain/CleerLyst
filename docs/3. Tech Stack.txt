@@ -1,0 +1,344 @@
+🔧 CLEERLYST — TECH STACK & ENGINEERING DECISIONS (V1)
+
+## 0. High-Level Strategy (Read This First)
+
+Cleerlyst should be built as:
+
+> **A secure API-first SaaS with a thin client and strict backend rules**
+
+That means:
+
+* frontend is dumb
+* backend is strict
+* database is locked down
+* no “just for now” shortcuts
+
+You are not building a CRUD app.
+You are building a **data boundary**.
+
+---
+
+## 1️⃣ Frontend Stack (Student + Admin)
+
+### ✅ Recommended
+
+**Framework**
+
+* **Next.js (App Router)**
+  Why:
+
+  * Server Components (security + performance)
+  * Easy auth handling
+  * PWA support
+  * Works perfectly with AI coding tools
+
+**Language**
+
+* **TypeScript (mandatory)**
+
+  * No exceptions
+  * This catches logic leaks early
+
+**UI**
+
+* Tailwind CSS
+* Headless UI / Radix UI
+* Minimal custom components
+
+**State**
+
+* Server-first (no Redux)
+* TanStack Query only if needed
+
+### Practices
+
+* Never trust frontend for auth decisions
+* No client-side filtering of sensitive data
+* No “hidden fields” logic on frontend
+
+---
+
+## 2️⃣ Mobile App Strategy (Don’t Overthink)
+
+### ✅ Recommended
+
+* **PWA first**
+* Wrap with **Expo + WebView** OR **Capacitor**
+
+Why this is correct:
+
+* one codebase
+* push notifications
+* App Store presence
+* AI tools work well with it
+
+### Mobile Rules (Important)
+
+* ❌ No offline storage of results
+* ❌ No local database
+* ✅ Short-lived session tokens
+* ✅ Auto logout on inactivity
+
+Phones are hostile environments. Treat them as such.
+
+---
+
+## 3️⃣ Backend Stack (This Is Where It Matters)
+
+### Option A — **Best Long-Term (Recommended)**
+
+**Runtime**
+
+* **Node.js (18+)**
+
+**Framework**
+
+* **NestJS**
+
+  * Opinionated
+  * Enforces structure
+  * Excellent for role-based access
+  * Scales well beyond MVP
+
+**Why NestJS**
+
+* Guards for auth
+* Interceptors for logging
+* Clean separation of concerns
+* AI tools generate decent Nest code
+
+---
+
+### Option B — **Vibe-Coding Friendly (Acceptable)**
+
+* Node.js
+* **Hono / Fastify**
+* Modular services
+
+This is fine **only if** you stay disciplined.
+
+---
+
+## 4️⃣ About INSFORGE / Backend-as-a-Service (Very Important)
+
+I’ll be blunt.
+
+### Where BaaS helps you
+
+* Auth scaffolding
+* Email verification
+* Push notifications
+* Environment setup
+* Faster MVP
+
+### Where BaaS is dangerous for Cleerlyst
+
+* Row-level encryption
+* Fine-grained access control
+* Audit logs
+* Custom security rules
+* “No bulk access” guarantees
+
+Most BaaS platforms are built for:
+
+> “apps that want to show data”
+
+You are building:
+
+> “an app that must NOT show data”
+
+### My Recommendation
+
+Use **BaaS selectively**, not blindly.
+
+✅ OK to use BaaS for:
+
+* auth
+* user management
+* notifications
+* storage (private)
+
+❌ Do NOT use it as:
+
+* your core data access layer
+* your permission engine
+
+If Insforge allows **custom backend logic + private DB access**, fine.
+If it forces you into generic CRUD → **dangerous**.
+
+---
+
+## 5️⃣ Database (Non-Negotiable)
+
+### ✅ Recommended
+
+**PostgreSQL**
+
+* Self-managed or managed (Supabase, Neon, RDS)
+* Encrypted at rest
+
+### Schema Rules
+
+* No plaintext emails for lookup
+* Store:
+
+  * hashed identifiers
+  * encrypted payloads
+* Never allow:
+
+  * `SELECT * FROM records`
+
+### Crypto
+
+* libsodium / Node crypto
+* Row-level encryption
+* Key rotation ready (future)
+
+---
+
+## 6️⃣ File Handling (PDFs, Excel)
+
+### Flow
+
+* Upload → parse → destroy raw file OR store encrypted
+* Never expose raw file to students
+* Never serve files directly
+
+### Tools
+
+* XLSX parser
+* PDF text extraction
+* Strict validation
+
+Raw files are **toxic waste**. Handle and isolate.
+
+---
+
+## 7️⃣ Authentication & Authorization (Critical)
+
+### Auth
+
+* Email + domain verification
+* JWT with short TTL
+* Refresh tokens (rotating)
+
+### Authorization
+
+* Role-based (admin / student)
+* Dataset-level permissions
+* Identity-bound access only
+
+### Golden Rule
+
+> **Auth decides “who you are”
+> Backend decides “what you see”**
+
+Never invert this.
+
+---
+
+## 8️⃣ Notifications
+
+### Push
+
+* Firebase Cloud Messaging
+* APNS for iOS
+
+### Rules
+
+* No sensitive payloads
+* Notification = “You have an update”
+* App fetches data after auth
+
+This prevents lock-screen leaks.
+
+---
+
+## 9️⃣ Security Practices (Do These or Don’t Ship)
+
+### Mandatory
+
+* Rate limiting on all endpoints
+* No search endpoints
+* No list endpoints
+* No bulk export paths
+* Audit logs for admin actions
+
+### Logging
+
+* Log actions, not data
+* Never log decrypted payloads
+
+### Secrets
+
+* Environment variables only
+* Never hardcode keys
+* Rotate keys regularly
+
+---
+
+## 🔟 CI/CD & Deployment
+
+### Recommended
+
+* GitHub Actions
+* Environment separation:
+
+  * dev
+  * staging
+  * prod
+
+### Hosting
+
+* Backend: Fly.io / Railway / Render
+* Frontend: Vercel
+* DB: managed Postgres
+
+Keep ops boring.
+
+---
+
+## 11️⃣ Testing (Minimal but Smart)
+
+### Must Have
+
+* Auth flow tests
+* Dataset access tests
+* “Student cannot see others” tests
+
+You don’t need 100% coverage.
+You need **100% coverage of security assumptions**.
+
+---
+
+## 12️⃣ What Makes This “Bulletproof” (Reality Check)
+
+Cleerlyst is bulletproof **because of constraints**, not tech.
+
+* No search → no scraping
+* No lists → no leaks
+* No downloads → no forwarding
+* Identity-first → no guessing
+
+Tech supports this.
+Discipline enforces it.
+
+---
+
+## Final Coach Advice (Read Carefully)
+
+If you:
+
+* rush backend decisions
+* trust BaaS too much
+* add “temporary” admin shortcuts
+
+You will accidentally rebuild Google Sheets with extra steps.
+
+If you:
+
+* enforce backend-only logic
+* keep frontend dumb
+* say “no” to features aggressively
+
+You’ll build something colleges actually **need**.

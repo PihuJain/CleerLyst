@@ -1,0 +1,357 @@
+🔪 CLEERLYST FORK PLAN
+
+**(From Best-SaaS-Kit-V2 → Cleerlyst Core)**
+
+## Goal of This Fork
+
+Turn a **generic revenue-driven SaaS kit** into a **privacy-first institutional verification system**.
+
+You are:
+
+* **removing features**, not adding them
+* **tightening access**, not expanding it
+* **reducing surface area**, not growing it
+
+---
+
+## PHASE 0 — Create the Fork (Clean Base)
+
+1. Fork the repo
+
+2. Rename project everywhere:
+
+   * README
+   * package.json
+   * metadata
+     → **Cleerlyst**
+
+3. Add a top-level doc:
+
+```
+/CLEERLYST_SECURITY_PRINCIPLES.md
+```
+
+Paste this sentence at the top:
+
+> “Cleerlyst must never expose bulk institutional data.
+> Any feature that risks this is forbidden.”
+
+This is your **north star**.
+
+---
+
+## PHASE 1 — DELETE (Do This First, No Mercy)
+
+### ❌ Completely Remove These Folders
+
+Delete **entirely**:
+
+```
+src/app/dashboard/
+src/app/demo/
+src/app/api/stripe/
+src/components/billing/
+src/components/chat/
+src/components/checkout/
+src/components/landing/
+src/components/admin/discount*
+sql-queries/discount*
+docs/DISCOUNT_SYSTEM*
+```
+
+### ❌ Remove These Concepts From Codebase
+
+Search & delete:
+
+* Stripe
+* Discount
+* Billing
+* Credits
+* Revenue
+* AI
+* OpenRouter
+* Chat
+* Pro plan
+
+If an AI coder tries to “reuse” them — **stop them**.
+
+Cleerlyst does **not** monetize per user.
+
+---
+
+## PHASE 2 — STRIP THE ADMIN (Critical)
+
+### Delete Admin Omniscience
+
+Remove:
+
+```
+src/app/admin/users
+src/app/admin/analytics
+src/app/admin/settings
+```
+
+Admins must **never**:
+
+* list students
+* inspect profiles
+* see per-user data
+
+### What Admin IS Allowed To Do
+
+Admins may only:
+
+* upload datasets
+* configure visibility
+* publish / revoke datasets
+* see **aggregate counts only**
+
+If admin UI shows:
+
+> “User: chinmaya@…”
+> You already failed.
+
+---
+
+## PHASE 3 — REBUILD ADMIN (Cleerlyst Style)
+
+### Create New Admin Routes
+
+```
+src/app/admin/
+├── datasets/
+│   ├── page.tsx        // list datasets (no student data)
+│   ├── new/page.tsx   // upload dataset
+│   ├── [id]/page.tsx  // dataset config + stats
+```
+
+### Admin UI Must Show ONLY:
+
+* dataset title
+* type (placement / academic / etc.)
+* published status
+* number of matched users
+* expiry date
+
+### Admin UI Must NEVER Show:
+
+* student names
+* emails
+* reg numbers
+* rows
+* previews
+
+---
+
+## PHASE 4 — AUTH MODIFICATIONS (VERY IMPORTANT)
+
+### Keep:
+
+* NextAuth
+* Google OAuth
+* middleware protection
+
+### Modify:
+
+In `src/lib/auth.ts`:
+
+#### ❌ Default behavior (bad)
+
+```ts
+email: user.email
+```
+
+#### ✅ Replace with
+
+```ts
+email_hash: sha256(lowercase(email + institute_salt))
+```
+
+Store **only hashes**.
+
+### Add Domain Enforcement
+
+Reject login if:
+
+* email domain not in `institutes.allowed_domains`
+
+---
+
+## PHASE 5 — DATABASE REPLACEMENT (No Exceptions)
+
+### DELETE Existing Tables
+
+* users (replace)
+* analytics
+* billing
+* discounts
+* credits
+
+### CREATE ONLY THESE TABLES (V1)
+
+From earlier spec:
+
+* institutes
+* users
+* user_identifiers
+* datasets
+* dataset_records
+* notifications
+* audit_logs
+
+If AI suggests:
+
+> “Let’s add a table for convenience”
+
+Your answer:
+
+> **No. Security > convenience.**
+
+---
+
+## PHASE 6 — DATASET INGESTION PIPELINE (CORE LOGIC)
+
+### New API Route
+
+```
+POST /api/admin/datasets/upload
+```
+
+Backend does:
+
+1. Accept file
+2. Parse server-side
+3. Admin maps:
+
+   * identifier column
+   * visible fields
+4. For each row:
+
+   * hash identifier
+   * encrypt payload
+   * store as independent record
+5. Destroy raw file (or encrypt + archive)
+
+Frontend **never** touches rows.
+
+---
+
+## PHASE 7 — STUDENT SIDE (READ-ONLY BY DESIGN)
+
+### Student Routes
+
+```
+src/app/
+├── feed/page.tsx
+├── dataset/[id]/page.tsx
+```
+
+### Feed API
+
+```
+GET /api/me/feed
+```
+
+Returns:
+
+* dataset title
+* type
+* timestamp
+* status (available / action required)
+
+### Record API
+
+```
+GET /api/datasets/{id}/me
+```
+
+Backend flow:
+
+1. Identify logged-in user
+2. Fetch hashed identifiers
+3. Match against dataset_records
+4. Decrypt payload
+5. Return ONLY allowed fields
+
+If no match:
+
+```json
+{ "matched": false }
+```
+
+**Same response shape. No inference leaks.**
+
+---
+
+## PHASE 8 — NOTIFICATIONS (Replace Email Spam)
+
+### Keep:
+
+* Resend (email fallback)
+
+### Add:
+
+* Firebase Cloud Messaging (FCM)
+* APNS (later)
+
+### Rule:
+
+Notifications say:
+
+> “You have a new verified update on Cleerlyst”
+
+They NEVER say:
+
+* shortlisted
+* rejected
+* payment done
+
+Data only appears **after login**.
+
+---
+
+## PHASE 9 — MOBILE APP (After Web Works)
+
+1. Make web app PWA-ready
+2. Wrap with Expo / Capacitor
+3. Enable push notifications
+4. NO local storage of results
+
+Phone = untrusted.
+
+---
+
+## PHASE 10 — AI CODER GUARDRAILS (THIS IS KEY)
+
+When you prompt AI coders, prepend this:
+
+> ❗ SYSTEM RULES
+>
+> * Never create APIs that return lists of students
+> * Never allow searching identifiers
+> * Never expose dataset_records directly
+> * Never store plaintext emails or reg numbers
+> * Never build bulk export or download features
+
+This will prevent 80% of accidental insecurity.
+
+---
+
+## FINAL SANITY CHECK (Ask This Every Time)
+
+Before merging any feature, ask:
+
+> “Could this help someone reconstruct a list?”
+
+If answer is **yes or maybe** → reject.
+
+---
+
+## What You Have Now
+
+At this point:
+
+* the SaaS kit is **neutralized**
+* Cleerlyst’s philosophy is enforced in code
+* you have a **real infra product**, not a toy
+

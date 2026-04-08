@@ -1,0 +1,294 @@
+🧱 CLEERLYST — SYSTEM ARCHITECTURE (V1)
+
+## Architectural Philosophy
+
+Cleerlyst is built on **three hard rules**:
+
+1. **Identity-first access** (no anonymous data)
+2. **Row-level data isolation** (no datasets exposed)
+3. **One write → many verified reads**
+
+Everything flows from these.
+
+---
+
+## 🧠 High-Level Architecture (Mental Model)
+
+```
+          ┌─────────────────────┐
+          │   Admin (Web)       │
+          │  Placement / Acad   │
+          └─────────┬───────────┘
+                    │
+              Upload Dataset
+                    │
+                    ▼
+        ┌─────────────────────────┐
+        │  Cleerlyst Backend API  │
+        │ (Auth + Logic + Crypto) │
+        └───────┬─────────┬──────┘
+                │         │
+        Encrypted Rows    Notifications
+                │         │
+                ▼         ▼
+     ┌────────────────┐  ┌─────────────────┐
+     │ Secure Database│  │ Push Service    │
+     │ (Row-level Enc)│  │ (FCM / APNS)    │
+     └───────┬────────┘  └───────┬─────────┘
+             │                   │
+     Identity Match        Result-only Push
+             │                   │
+             ▼                   ▼
+      ┌────────────────────────────────┐
+      │ Student App / Web (Read-only) │
+      └────────────────────────────────┘
+```
+
+---
+
+## 🧩 Core Components (Detailed)
+
+---
+
+## 1️⃣ Client Layer
+
+### A. Student Client
+
+* Platforms:
+
+  * Web (PWA)
+  * Android (wrapped)
+  * iOS (wrapped)
+* Responsibilities:
+
+  * Login
+  * View personal feed
+  * View own verification results
+  * Receive push notifications
+* **No data storage**
+* **No dataset access**
+
+> Student client is a **viewer**, not a browser.
+
+---
+
+### B. Admin Client
+
+* Platform:
+
+  * Web only (V1)
+* Responsibilities:
+
+  * Upload files (CSV / XLSX / PDF)
+  * Map identifiers
+  * Configure visibility
+  * Publish / revoke datasets
+* No access to student-side views
+
+---
+
+## 2️⃣ Authentication & Identity Service
+
+### Purpose
+
+Ensure **only real institutional users** exist.
+
+### How it works
+
+* Email-based auth
+* Domain restriction (`@vitbhopal.ac.in`)
+* JWT / session tokens
+* Role-based access (student vs admin)
+
+### Identity Mapping (Critical)
+
+Each student identity stores:
+
+* email (hashed)
+* optional reg number (hashed)
+* institute ID
+
+> **No plaintext identifiers used for lookup**
+
+---
+
+## 3️⃣ Dataset Processing Service (The Heart)
+
+This is what replaces PDFs and Excel sharing.
+
+### On Admin Upload:
+
+1. File uploaded
+2. Parsed server-side
+3. Admin selects:
+
+   * identifier column
+   * visible fields
+   * hidden fields
+4. System transforms dataset into:
+
+```
+hashed_identifier → encrypted_row_payload
+```
+
+### Important:
+
+* Rows are **independent**
+* No dataset can be reconstructed
+* Even backend cannot read rows without context
+
+---
+
+## 4️⃣ Encryption & Data Isolation Layer
+
+### Why this exists
+
+To prevent:
+
+* internal misuse
+* accidental leaks
+* bulk exports
+
+### Model (Simple but strong)
+
+* Each row encrypted separately
+* Identifier hash used only for matching
+* Payload decrypted **only after identity match**
+
+> Think: “email unlocks only its own row”
+
+---
+
+## 5️⃣ Core Backend API
+
+### Responsibilities
+
+* Auth validation
+* Dataset lifecycle
+* Identity matching
+* Access control
+* Audit logging
+
+### Core APIs
+
+* `POST /datasets/upload`
+* `POST /datasets/publish`
+* `GET /feed`
+* `GET /dataset/{id}/my-record`
+* `POST /notifications/send`
+
+### Forbidden APIs (Do not exist)
+
+* ❌ download dataset
+* ❌ list all records
+* ❌ search arbitrary identifiers
+
+---
+
+## 6️⃣ Notification System
+
+### Push-first design
+
+* Firebase Cloud Messaging (Android/Web)
+* APNS (iOS)
+
+### Notification Rules
+
+* No sensitive data in payload
+* Message examples:
+
+  * “New academic update available”
+  * “Action required on recent verification”
+
+### Why this matters
+
+* Email becomes optional
+* No attachments ever
+* Students don’t miss updates
+
+---
+
+## 7️⃣ Feed & History Service
+
+### Feed
+
+* Ordered by time
+* Filtered by identity
+* Immutable entries
+
+### History
+
+* Proof of:
+
+  * what was published
+  * when student accessed it
+* Helps admins resolve disputes
+
+---
+
+## 8️⃣ Security & Abuse Controls
+
+### Prevents:
+
+* scraping
+* enumeration
+* mass access
+
+### Techniques:
+
+* No search endpoints
+* Rate limiting
+* Token-bound access
+* Watermarking
+* Auto-expiry of datasets
+
+---
+
+## 9️⃣ What Happens in Real Scenarios
+
+### Example: Dell Shortlist
+
+* Admin uploads shortlist
+* Students get push
+* Each student sees:
+
+  * shortlisted: yes/no
+  * test info
+* Nobody sees Excel
+
+### Example: NPTEL Payment Verification
+
+* Admin uploads PDF
+* Students see:
+
+  * enrollment status
+  * error flag if incorrect
+* No public humiliation
+* No data leak
+
+---
+
+## 🔥 Key Architectural Insight (This Is Important)
+
+Cleerlyst **never answers the question**:
+
+> “Who is in the list?”
+
+It only answers:
+
+> “What applies to *this* identity?”
+
+That’s the entire security model.
+
+---
+
+
+## 🧨 What Will Break If You Ignore This Architecture
+
+* Allowing search → scraping
+* Allowing downloads → leaks
+* Allowing list previews → reconstruction
+* Storing plaintext → liability
+
+Stick to the model.
+

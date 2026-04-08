@@ -1,0 +1,266 @@
+1️⃣ What This SaaS Kit Is ACTUALLY Good At
+
+Let’s be fair first.
+
+This kit is strong in:
+
+### ✅ Things you SHOULD reuse
+
+* Next.js 15 + App Router
+* TypeScript
+* Tailwind + ShadCN
+* Neon Postgres
+* Google OAuth via NextAuth
+* Admin routing & middleware
+* Vercel deployment
+* Environment handling
+* Basic role-based access (admin vs user)
+
+This saves you **weeks** of boring setup.
+
+So yes — **using it is rational**.
+
+---
+
+# 2️⃣ Where This Kit Is DANGEROUS for Cleerlyst
+
+Now the critical part.
+
+Cleerlyst’s **entire value proposition** is:
+
+> “You cannot see data unless it belongs to you.”
+
+This SaaS kit is built for:
+
+> “Admins can see everything.”
+
+That is a **direct philosophical conflict**.
+
+Here are the **red flags** you must address.
+
+---
+
+## 🚨 Red Flag 1: Admin Dashboard With Full Visibility
+
+The kit:
+
+* lists users
+* shows analytics
+* allows CRUD everywhere
+
+For Cleerlyst:
+
+* admins must **never** see student rows
+* admins must **never** see decrypted payloads
+
+### Required Action
+
+❌ **Do NOT reuse admin analytics / user listing pages**
+✅ Replace admin dashboard with:
+
+* dataset-level stats only
+* no per-user views
+* no record previews
+
+---
+
+## 🚨 Red Flag 2: Database-Centric CRUD Mentality
+
+The kit uses:
+
+* direct table access
+* functions like `get_discount_stats()`
+* admin queries over full tables
+
+Cleerlyst must:
+
+* **never allow table-wide queries**
+* **never expose raw rows**
+
+### Required Action
+
+* Ban any `SELECT *` logic
+* Remove analytics that scan full tables
+* Force all access through:
+
+  ```
+  identity_hash → single record
+  ```
+
+If AI generates SQL analytics → **reject it**.
+
+---
+
+## 🚨 Red Flag 3: NextAuth Default User Model
+
+NextAuth assumes:
+
+* users are safe to enumerate
+* admins can “manage” users
+
+Cleerlyst requires:
+
+* hashed identifiers
+* no plaintext emails for lookup
+* no user search
+
+### Required Action
+
+* Override default user queries
+* Hash emails before storage
+* Never expose `/admin/users` style routes
+
+---
+
+## 🚨 Red Flag 4: Stripe / Billing / Discount System
+
+This entire subsystem is **irrelevant** and **dangerous**.
+
+* Payments introduce liability
+* Discount codes add complexity
+* Billing dashboards expose user data
+
+### Required Action
+
+❌ Delete Stripe entirely
+❌ Delete discount system
+❌ Delete billing pages
+
+Cleerlyst V1 should **not charge money**.
+
+(If you monetize later, it’s institute-level invoicing, not Stripe checkout.)
+
+---
+
+## 🚨 Red Flag 5: AI Chat System
+
+This is pure noise for Cleerlyst.
+
+* No relevance
+* High security risk
+* Token leaks
+* Cost sink
+
+### Required Action
+
+❌ Delete AI chat completely
+
+---
+
+# 3️⃣ What the Kit Becomes After Surgery
+
+After removing unsafe parts, the kit becomes:
+
+### ✅ What You KEEP
+
+* Auth system (with modifications)
+* App Router structure
+* Middleware protection
+* Admin route gating
+* Styling & layout
+* Deployment config
+
+### ❌ What You REMOVE
+
+* Billing
+* Stripe
+* Discounts
+* AI chat
+* User analytics
+* Revenue dashboards
+* “Super admin” omniscience
+
+What remains is a **clean shell** for Cleerlyst.
+
+---
+
+# 4️⃣ Revised Tech Stack (Aligned to This Kit)
+
+Here’s the **final stack**, explicitly mapped to the kit.
+
+## Frontend
+
+* Next.js 15 (keep)
+* App Router (keep)
+* Tailwind + ShadCN (keep)
+* Remove all “dashboard fluff”
+
+## Backend
+
+* Next.js API routes (acceptable for V1)
+* OR move critical logic to server actions
+* All sensitive logic server-only
+
+## Auth
+
+* NextAuth Google OAuth (keep)
+* Add:
+
+  * domain restriction
+  * email hashing
+  * role enforcement
+
+## Database
+
+* Neon Postgres (keep)
+* **Replace schema entirely** with Cleerlyst schema we defined
+* No shared analytics functions
+
+## Notifications
+
+* Add FCM / APNS
+* Email only as fallback (Resend is fine)
+
+---
+
+# 5️⃣ Non-Negotiable Engineering Rules (Print These)
+
+If you give this project to AI coders, include this verbatim:
+
+1. **No endpoint may return more than one student record**
+2. **No endpoint may accept arbitrary search input**
+3. **No admin route may reveal student-level data**
+4. **All identifiers must be hashed before storage**
+5. **All payloads must be encrypted at rest**
+6. **No bulk export APIs may exist**
+7. **Frontend never decides access — backend only**
+
+If any rule is violated → reject the code.
+
+---
+
+# 6️⃣ Decision: Should You Proceed With This Kit?
+
+### ✅ YES, proceed **IF**:
+
+* you treat it as a UI/auth scaffold
+* you delete unsafe subsystems
+* you enforce Cleerlyst’s constraints aggressively
+
+### ❌ NO, if you:
+
+* want to “quickly adapt” everything
+* keep admin analytics
+* keep Stripe
+* keep CRUD everywhere
+
+That would silently destroy the product.
+
+---
+
+# 7️⃣ What I Recommend We Do Next (Very Specific)
+
+Next step should be:
+
+### 🔧 **“Cleerlyst Fork Plan”**
+
+I will:
+
+* list exact folders to delete
+* list exact files to modify
+* show where to plug in:
+
+  * dataset upload
+  * identity matching
+  * encrypted records
+

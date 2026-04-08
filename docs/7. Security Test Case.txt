@@ -1,0 +1,350 @@
+🔐 CLEERLYST — SECURITY TEST CASES
+
+**(Attacker-Driven, Non-Negotiable)**
+
+Each test has:
+
+* **Threat**
+* **Attack attempt**
+* **Expected result**
+* **Failure meaning**
+
+If *any* test fails → the system is **not Cleerlyst**.
+
+---
+
+## 🟥 CATEGORY 1: IDENTITY & AUTHENTICATION
+
+### Test 1.1 — Domain Restriction
+
+**Threat:** External user joins system
+**Attack:**
+
+* Try login with `gmail.com`
+  **Expected:**
+* Login denied
+* No user record created
+  **Failure Means:**
+* Anyone can probe datasets → fatal
+
+---
+
+### Test 1.2 — Email Hashing
+
+**Threat:** Insider DB leak
+**Attack:**
+
+* Inspect `users` table
+  **Expected:**
+* No plaintext email
+* Only hashes present
+  **Failure Means:**
+* Database leak becomes actionable → fatal
+
+---
+
+### Test 1.3 — Role Escalation
+
+**Threat:** Student accessing admin routes
+**Attack:**
+
+* Student visits `/admin/datasets`
+  **Expected:**
+* 403 / redirect
+  **Failure Means:**
+* Students can manipulate datasets → fatal
+
+---
+
+## 🟥 CATEGORY 2: DATASET ACCESS (MOST IMPORTANT)
+
+### Test 2.1 — No Dataset Listing
+
+**Threat:** Dataset enumeration
+**Attack:**
+
+* Call `/api/datasets/{id}/records`
+  **Expected:**
+* Endpoint does not exist
+  **Failure Means:**
+* Entire list can be scraped → fatal
+
+---
+
+### Test 2.2 — Identity-Bound Access
+
+**Threat:** Student guessing another identifier
+**Attack:**
+
+* Student A tries to fetch dataset using Student B’s reg no
+  **Expected:**
+* Backend ignores input
+* Only logged-in identity used
+  **Failure Means:**
+* Scraping becomes possible → fatal
+
+---
+
+### Test 2.3 — Non-Match Response Uniformity
+
+**Threat:** Inference attack
+**Attack:**
+
+* Compare response when matched vs not matched
+  **Expected:**
+* Same HTTP status
+* Same response shape
+  **Failure Means:**
+* Attackers can infer list size → severe
+
+---
+
+### Test 2.4 — No Join Path
+
+**Threat:** Backend dev mistake
+**Attack:**
+
+* Attempt SQL join between `users` and `dataset_records`
+  **Expected:**
+* Impossible by schema design
+  **Failure Means:**
+* Bulk access becomes trivial → fatal
+
+---
+
+## 🟥 CATEGORY 3: SCRAPING & ENUMERATION
+
+### Test 3.1 — No Search APIs
+
+**Threat:** Automated scraping
+**Attack:**
+
+* Look for endpoints like `/search`, `/lookup`, `/find`
+  **Expected:**
+* None exist
+  **Failure Means:**
+* List reconstruction possible → fatal
+
+---
+
+### Test 3.2 — Rate Limiting
+
+**Threat:** Brute force identity probing
+**Attack:**
+
+* Spam `/datasets/{id}/me`
+  **Expected:**
+* Rate limited
+* Temporary block
+  **Failure Means:**
+* Scraper can iterate accounts → high risk
+
+---
+
+### Test 3.3 — Same-User Repetition
+
+**Threat:** Scraper using one account
+**Attack:**
+
+* Same user calls API repeatedly
+  **Expected:**
+* Same single record returned
+  **Failure Means:**
+* Multiple rows being exposed → fatal
+
+---
+
+## 🟥 CATEGORY 4: ADMIN MISUSE & MISTAKES
+
+### Test 4.1 — Admin Cannot Preview Rows
+
+**Threat:** Curious admin
+**Attack:**
+
+* Admin tries to view dataset contents
+  **Expected:**
+* No row preview UI
+* No API support
+  **Failure Means:**
+* Insider leak risk → fatal
+
+---
+
+### Test 4.2 — Sensitive Column Warning
+
+**Threat:** Accidental exposure
+**Attack:**
+
+* Admin uploads sheet with email/phone columns
+  **Expected:**
+* UI warns
+* Requires explicit confirmation
+  **Failure Means:**
+* Easy human error → severe
+
+---
+
+### Test 4.3 — Dataset Revocation
+
+**Threat:** Wrong list published
+**Attack:**
+
+* Admin revokes dataset
+  **Expected:**
+* Instant access removal
+  **Failure Means:**
+* Damage can’t be contained → severe
+
+---
+
+## 🟥 CATEGORY 5: FILE HANDLING
+
+### Test 5.1 — Raw File Access
+
+**Threat:** PDF/Excel leak
+**Attack:**
+
+* Try to access uploaded file URL
+  **Expected:**
+* 403 or not found
+  **Failure Means:**
+* Whole system pointless → fatal
+
+---
+
+### Test 5.2 — Download Attempt
+
+**Threat:** Forwarding
+**Attack:**
+
+* Student tries “Save as”
+  **Expected:**
+* No downloadable resource
+  **Failure Means:**
+* Data spreads instantly → fatal
+
+---
+
+## 🟥 CATEGORY 6: NOTIFICATIONS & PRIVACY
+
+### Test 6.1 — Lock Screen Leak
+
+**Threat:** Shoulder surfing
+**Attack:**
+
+* Receive push notification
+  **Expected:**
+* Generic message only
+  **Failure Means:**
+* Privacy breach → severe
+
+---
+
+### Test 6.2 — Email Attachment
+
+**Threat:** Forwarded emails
+**Attack:**
+
+* Check outgoing emails
+  **Expected:**
+* No attachments
+  **Failure Means:**
+* Back to square one → fatal
+
+---
+
+## 🟥 CATEGORY 7: DATABASE BREACH SIMULATION
+
+### Test 7.1 — DB Dump Analysis
+
+**Threat:** External breach
+**Attack:**
+
+* Dump entire DB
+  **Expected:**
+* Identifiers hashed
+* Payloads encrypted
+* No readable list
+  **Failure Means:**
+* Legal + reputational disaster → fatal
+
+---
+
+### Test 7.2 — Encryption Key Separation
+
+**Threat:** Insider access
+**Attack:**
+
+* Access DB without app secrets
+  **Expected:**
+* Payloads remain unreadable
+  **Failure Means:**
+* Encryption meaningless → fatal
+
+---
+
+## 🟥 CATEGORY 8: UI / UX LEAKS (Often Missed)
+
+### Test 8.1 — No “Others”
+
+**Threat:** Curiosity-driven inference
+**Attack:**
+
+* Look for “X others shortlisted”
+  **Expected:**
+* Never shown
+  **Failure Means:**
+* Dataset size inference → medium risk
+
+---
+
+### Test 8.2 — Screenshot Accountability
+
+**Threat:** Casual leak
+**Attack:**
+
+* Screenshot record view
+  **Expected:**
+* Watermark visible
+  **Failure Means:**
+* No deterrence → acceptable but not ideal
+
+---
+
+## 🟩 PASS CRITERIA (THIS IS STRICT)
+
+Cleerlyst is considered **secure enough to ship** only if:
+
+* ✅ No test marked **fatal** fails
+* ⚠️ “Severe” issues are acknowledged + mitigated
+* ❌ Any fatal failure → stop shipping immediately
+
+---
+
+## 🔑 How to Use This Practically
+
+### With AI Coders
+
+Paste the relevant test before asking them to build a feature:
+
+> “Implement X while ensuring Test 2.1, 2.2, 2.3 still pass.”
+
+### With Yourself
+
+Before merging:
+
+> “Which test does this change threaten?”
+
+If you can’t answer → don’t merge.
+
+---
+
+## Final Coach Note (Important)
+
+This test suite is **more valuable than your code**.
+
+Anyone can write Next.js.
+Very few people design **negative-capability systems**:
+systems defined by what they *refuse* to do.
+
+Cleerlyst lives or dies on restraint.

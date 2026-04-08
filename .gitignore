@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# env
+.env
+.env.*
+!.env.example
+
+# builds
+dist/
+build/
+out/
+.next/
+.turbo/
+
+# logs
+*.log
+
+# IDE / editor
+.vscode/
+.idea/
+.cursor/
+
+# OS
+.DS_Store
+Thumbs.db
