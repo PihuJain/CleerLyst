@@ -93,6 +93,43 @@ BEGIN
         RAISE NOTICE '[WARN]  idx_dataset_records_identifier_hash missing';
     END IF;
 
+    -- Verify UNIQUE (user_id, type) on user_identifiers
+    IF EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename  = 'user_identifiers'
+          AND indexdef LIKE '%user_id%type%'
+          AND indexdef LIKE '%UNIQUE%'
+    ) THEN
+        RAISE NOTICE '[OK]    user_identifiers UNIQUE (user_id, type) exists';
+    ELSE
+        RAISE NOTICE '[FAIL]  user_identifiers UNIQUE (user_id, type) missing!';
+        ok := FALSE;
+    END IF;
+
+    -- Verify UNIQUE (type, identifier_hash) on user_identifiers
+    IF EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename  = 'user_identifiers'
+          AND indexdef LIKE '%type%identifier_hash%'
+          AND indexdef LIKE '%UNIQUE%'
+    ) THEN
+        RAISE NOTICE '[OK]    user_identifiers UNIQUE (type, identifier_hash) exists';
+    ELSE
+        RAISE NOTICE '[FAIL]  user_identifiers UNIQUE (type, identifier_hash) missing!';
+        ok := FALSE;
+    END IF;
+
+    -- Warn if the old bare UNIQUE(identifier_hash) still exists
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'user_identifiers'::regclass
+          AND conname   = 'user_identifiers_identifier_hash_key'
+    ) THEN
+        RAISE NOTICE '[WARN]  old UNIQUE(identifier_hash) constraint still present — run migration 009';
+    END IF;
+
     RAISE NOTICE '';
 
     IF ok THEN

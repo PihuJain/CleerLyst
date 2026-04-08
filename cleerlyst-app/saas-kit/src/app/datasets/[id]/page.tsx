@@ -1,11 +1,13 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import Link from "next/link";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { config } from "@/lib/config";
 
 export const runtime = "nodejs";
@@ -27,8 +29,16 @@ export const runtime = "nodejs";
 interface MeResponse {
   matched: boolean;
   data?: Record<string, unknown>;
+  reason?: string;
+  required_type?: string;
   error?: string;
 }
+
+/** Human-readable labels for identifier types (no crypto terminology). */
+const TYPE_LABELS: Record<string, string> = {
+  reg_no: "Registration Number",
+  roll_no: "Roll Number",
+};
 
 export default async function DatasetPage({
   params,
@@ -75,6 +85,9 @@ export default async function DatasetPage({
 
   const isMatched = body.matched === true && body.data != null;
   const fields = isMatched ? body.data! : null;
+  const isMissingIdentifier = body.reason === "missing_identifier";
+  const requiredTypeLabel =
+    TYPE_LABELS[body.required_type ?? ""] || body.required_type || "identifier";
 
   // ----- 4. Render — identical structure for both branches -----
 
@@ -103,6 +116,17 @@ export default async function DatasetPage({
                     </div>
                   ))}
                 </dl>
+              ) : isMissingIdentifier ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center space-y-3">
+                  <p className="text-sm text-amber-800">
+                    This dataset requires your{" "}
+                    <span className="font-semibold">{requiredTypeLabel}</span>.
+                    Add it in your profile to verify.
+                  </p>
+                  <Button asChild size="sm">
+                    <Link href="/dashboard/profile">Add Identifier</Link>
+                  </Button>
+                </div>
               ) : (
                 <p className="text-center text-gray-500 py-6">
                   No record available for this dataset.

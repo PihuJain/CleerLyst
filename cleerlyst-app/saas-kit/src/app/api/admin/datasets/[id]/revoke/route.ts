@@ -68,7 +68,20 @@ export async function POST(
         );
       }
 
-      // ----- 3. Revoke (transactional: status update + audit log) -----
+      // ----- 3. LIFECYCLE CHECK: only published datasets can be revoked -----
+
+      if (dataset.status !== "published") {
+        logWarn("dataset.revoke.wrong_status", {
+          datasetId,
+          status: dataset.status,
+        });
+        return NextResponse.json(
+          { error: "cannot_revoke_non_published_dataset" },
+          { status: 400 },
+        );
+      }
+
+      // ----- 4. Revoke (transactional: status update + audit log) -----
 
       let result: { id: string; status: string };
       try {
@@ -79,9 +92,9 @@ export async function POST(
         return NextResponse.json({ error: message }, { status: 400 });
       }
 
-      // ----- 4. Build response — no institute_id, no title, no published_at -----
+      // ----- 5. Build response — no institute_id, no title, no published_at -----
 
-      logInfo("dataset.revoke.success", { datasetId, status: result.status });
+      logInfo("dataset.revoke.success", { datasetId });
 
       return NextResponse.json({
         success: true,

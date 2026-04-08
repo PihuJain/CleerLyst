@@ -59,11 +59,15 @@ COMMENT ON COLUMN users.email_hash IS 'SHA-256(lowercase(email) + institute.id) 
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS user_identifiers (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    type            identifier_type NOT NULL,
-    identifier_hash TEXT NOT NULL UNIQUE,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id               UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    type                  identifier_type NOT NULL,
+    identifier_hash       TEXT NOT NULL,
+    identifier_encrypted  BYTEA,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    UNIQUE (user_id, type),
+    UNIQUE (type, identifier_hash)
 );
 
 -- ============================================================================

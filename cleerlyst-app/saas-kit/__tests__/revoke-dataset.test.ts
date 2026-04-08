@@ -74,7 +74,8 @@ describe("Revoke Category 1 — Cannot Revoke Twice", () => {
     expect(response.status).toBe(400);
 
     const body = await response.json();
-    expect(body.error).toMatch(/already revoked/i);
+    // Revoked datasets cannot be revoked — they're not "published"
+    expect(body.error).toBe("cannot_revoke_non_published_dataset");
     expect(body.success).toBeUndefined();
   });
 
@@ -523,10 +524,12 @@ describe("Revoke Category 6 — /datasets/{id}/me Returns matched:false After Re
       params: Promise.resolve({ id: "ds-uuid-1" }),
     });
 
-    expect(response.status).toBe(200);
+    // LIFECYCLE RULE: revoked datasets return 404 (uniform ambiguity)
+    expect(response.status).toBe(404);
 
     const body = await response.json();
-    expect(body.matched).toBe(false);
+    expect(body.error).toBe("Not found");
+    expect(body.matched).toBeUndefined();
     expect(body.data).toBeUndefined();
   });
 
@@ -600,19 +603,12 @@ describe("Revoke Category 6 — /datasets/{id}/me Returns matched:false After Re
     expect(statusCheckIdx).toBeLessThan(findRecordIdx);
   });
 
-  it("6.4 — /me route returns NOT_MATCHED (not 404/403) for revoked dataset", () => {
+  it("6.4 — /me route returns DATASET_NOT_FOUND (404) for non-published datasets (uniform ambiguity)", () => {
     const meRoute = readSource("src/app/api/datasets/[id]/me/route.ts");
-    // Find the status check block
-    const statusBlock = meRoute.match(
-      /if\s*\(\s*dataset\.status\s*!==\s*["']published["']\s*\)\s*\{[\s\S]*?\}/,
-    );
-    expect(statusBlock).not.toBeNull();
 
-    // Must return NOT_MATCHED, not a distinct error code
-    expect(statusBlock![0]).toContain("NOT_MATCHED");
-    expect(statusBlock![0]).not.toContain("404");
-    expect(statusBlock![0]).not.toContain("403");
-    expect(statusBlock![0]).not.toContain("revoked");
+    // The status check must combine non-existence and non-published into a single guard
+    expect(meRoute).toContain("DATASET_NOT_FOUND");
+    expect(meRoute).toMatch(/!dataset\s*\|\|\s*dataset\.status\s*!==\s*["']published["']/);
   });
 
   it("6.5 — /me response for revoked dataset is identical shape to never-existed dataset", async () => {
@@ -693,13 +689,13 @@ describe("Revoke Category 6 — /datasets/{id}/me Returns matched:false After Re
 
     const notFoundBody = await notFoundResponse.json();
 
-    // Both must be HTTP 200
-    expect(revokedResponse.status).toBe(200);
-    expect(notFoundResponse.status).toBe(200);
+    // Both must be HTTP 404 (uniform ambiguity — lifecycle enforcement)
+    expect(revokedResponse.status).toBe(404);
+    expect(notFoundResponse.status).toBe(404);
 
-    // Both must have identical shape: { matched: false }
-    expect(revokedBody).toEqual({ matched: false });
-    expect(notFoundBody).toEqual({ matched: false });
+    // Both must have identical shape: { error: "Not found" }
+    expect(revokedBody).toEqual({ error: "Not found" });
+    expect(notFoundBody).toEqual({ error: "Not found" });
 
     // Shapes must be identical — an attacker cannot distinguish
     expect(Object.keys(revokedBody).sort()).toEqual(
