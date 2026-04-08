@@ -821,12 +821,16 @@ export async function markNotificationRead(
 /**
  * Admin-safe dataset metadata — only fields an admin may see.
  * No visibility_config. No created_by details. No record counts.
+ * has_headers indicates whether records have been uploaded (schema set).
+ * has_visibility indicates whether visibility config has been saved.
  */
 export interface AdminDatasetMeta {
   id: string;
   title: string;
   type: string;
   status: string;
+  has_headers: boolean;
+  has_visibility: boolean;
   created_at: Date;
   published_at: Date | null;
 }
@@ -849,7 +853,9 @@ export async function getAdminDatasetsForInstitute(
   const client = await pool.connect();
   try {
     const result = await client.query<AdminDatasetMeta>(
-      `SELECT id, title, type, status, created_at, published_at
+      `SELECT id, title, type, status, created_at, published_at,
+              jsonb_array_length(COALESCE(headers, '[]'::jsonb)) > 0 AS has_headers,
+              jsonb_array_length(COALESCE(visibility_config->'allowed_fields', '[]'::jsonb)) > 0 AS has_visibility
          FROM datasets
         WHERE institute_id = $1
         ORDER BY created_at DESC`,
