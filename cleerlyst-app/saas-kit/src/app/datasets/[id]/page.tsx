@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { config } from "@/lib/config";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // ---------------------------------------------------------------------------
 // /datasets/[id]

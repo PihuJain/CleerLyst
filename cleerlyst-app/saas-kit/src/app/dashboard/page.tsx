@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
 export const runtime = 'nodejs';
+export const dynamic = "force-dynamic";
 import {
   User,
   Settings
