@@ -172,7 +172,14 @@ export function AdminDatasetListClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Publish failed");
+        const raw = data?.error;
+        const msg =
+          typeof raw === "string"
+            ? raw
+            : typeof raw?.message === "string"
+              ? raw.message
+              : "Publish failed";
+        setError(msg);
         return;
       }
       setPublishedBanner(datasetId);
@@ -193,7 +200,14 @@ export function AdminDatasetListClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Revoke failed");
+        const raw = data?.error;
+        const msg =
+          typeof raw === "string"
+            ? raw
+            : typeof raw?.message === "string"
+              ? raw.message
+              : "Revoke failed";
+        setError(msg);
         return;
       }
       router.refresh();
@@ -225,7 +239,14 @@ export function AdminDatasetListClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Creation failed");
+        const raw = data?.error;
+        const msg =
+          typeof raw === "string"
+            ? raw
+            : typeof raw?.message === "string"
+              ? raw.message
+              : "Creation failed";
+        setError(msg);
         return;
       }
       setCreateOpen(false);

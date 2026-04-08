@@ -240,7 +240,14 @@ export function DatasetVisibilityClient({
           router.push("/admin/datasets");
           return;
         }
-        setError(data.error || "Save failed");
+        const raw = data?.error;
+        const msg =
+          typeof raw === "string"
+            ? raw
+            : typeof raw?.message === "string"
+              ? raw.message
+              : "Save failed";
+        setError(msg);
         return;
       }
 

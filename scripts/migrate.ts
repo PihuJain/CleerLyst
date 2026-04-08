@@ -9,7 +9,7 @@
 // Or via npm:
 //   DATABASE_URL="your_direct_connection_string" npm run migrate
 //
-// Runs all migration files in order (001 through 008).
+// Runs all migration files in order (001 through 015).
 // Each migration is wrapped in its own transaction (BEGIN/COMMIT inside file).
 // Safe to re-run — uses IF NOT EXISTS / IF NOT EXISTS throughout.
 // ============================================================================
@@ -27,6 +27,13 @@ const MIGRATION_FILES = [
   "006_create_dataset_records.sql",
   "007_create_notifications.sql",
   "008_create_audit_logs.sql",
+  "009_add_user_identifiers_constraints.sql",
+  "010_add_identifier_encrypted.sql",
+  "011_add_dataset_headers.sql",
+  "012_unique_dataset_identifier.sql",
+  "013_add_dataset_audience_type.sql",
+  "014_public_dataset_constraints.sql",
+  "015_constraint_tightening.sql",
 ];
 
 async function main() {
@@ -80,7 +87,8 @@ async function main() {
     const enums = await client.query<{ typname: string }>(
       `SELECT typname FROM pg_type WHERE typname IN (
         'user_role', 'identifier_type', 'dataset_type',
-        'dataset_identifier_type', 'dataset_status', 'notification_type'
+        'dataset_identifier_type', 'dataset_status', 'notification_type',
+        'dataset_audience_type'
       ) ORDER BY typname`,
     );
     console.log("Enums:", enums.rows.map((r) => r.typname).join(", "));

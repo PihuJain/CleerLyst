@@ -82,7 +82,14 @@ export function AdminDatasetUploadClient({
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Upload failed");
+        const raw = data?.error;
+        const msg =
+          typeof raw === "string"
+            ? raw
+            : typeof raw?.message === "string"
+              ? raw.message
+              : "Upload failed";
+        setError(msg);
         return;
       }
 
