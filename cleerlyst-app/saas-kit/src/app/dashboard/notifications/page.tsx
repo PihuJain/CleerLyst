@@ -32,7 +32,7 @@ export default async function NotificationsPage() {
     dataset_id: n.dataset_id,
     dataset_title: n.dataset_title,
     type: n.type,
-    read_at: n.read_at ? n.read_at.toISOString() : null,
+    is_read: n.read_at !== null,
     created_at: n.created_at.toISOString(),
   }));
 

@@ -1,15 +1,12 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Bell,
@@ -17,7 +14,6 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Loader2,
-  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +26,7 @@ interface NotificationItem {
   dataset_id: string;
   dataset_title: string;
   type: string;
-  read_at: string | null;
+  is_read: boolean;
   created_at: string;
 }
 
@@ -42,21 +38,37 @@ interface NotificationsClientProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function notificationTypeLabel(type: string): string {
+function notificationTitle(type: string, datasetTitle: string): string {
+  if (type === "dataset_published") return "New dataset published";
+  return datasetTitle;
+}
+
+function notificationSubtitle(type: string): string {
   switch (type) {
+    case "dataset_published":
+      return "Click to verify results";
     case "new":
-      return "New Dataset";
+      return "New dataset available";
     case "update":
-      return "Updated";
+      return "Dataset has been updated";
     case "action_required":
-      return "Action Required";
+      return "Action required";
     default:
-      return type;
+      return "";
   }
 }
 
 function notificationTypeBadge(type: string) {
   switch (type) {
+    case "dataset_published":
+      return (
+        <Badge
+          variant="default"
+          className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+        >
+          Published
+        </Badge>
+      );
     case "new":
       return (
         <Badge
@@ -76,9 +88,7 @@ function notificationTypeBadge(type: string) {
         </Badge>
       );
     case "action_required":
-      return (
-        <Badge variant="destructive">Action Required</Badge>
-      );
+      return <Badge variant="destructive">Action Required</Badge>;
     default:
       return <Badge variant="outline">{type}</Badge>;
   }
@@ -107,13 +117,14 @@ function timeAgo(iso: string): string {
 export function NotificationsClient({
   notifications: initialNotifications,
 }: NotificationsClientProps) {
-  const [notifications, setNotifications] = React.useState(initialNotifications);
+  const router = useRouter();
+  const [notifications, setNotifications] =
+    React.useState(initialNotifications);
   const [markingRead, setMarkingRead] = React.useState<string | null>(null);
 
-  const unreadCount = notifications.filter((n) => !n.read_at).length;
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  async function handleMarkRead(notificationId: string) {
-    setMarkingRead(notificationId);
+  async function markRead(notificationId: string) {
     try {
       const res = await fetch(
         `/api/me/notifications/${notificationId}/read`,
@@ -122,17 +133,30 @@ export function NotificationsClient({
       if (res.ok) {
         setNotifications((prev) =>
           prev.map((n) =>
-            n.id === notificationId
-              ? { ...n, read_at: new Date().toISOString() }
-              : n,
+            n.id === notificationId ? { ...n, is_read: true } : n,
           ),
         );
       }
     } catch {
       // Silent failure — notification stays unread
-    } finally {
-      setMarkingRead(null);
     }
+  }
+
+  async function handleClick(n: NotificationItem) {
+    if (!n.is_read) {
+      await markRead(n.id);
+    }
+    router.push(`/datasets/${n.dataset_id}`);
+  }
+
+  async function handleMarkReadOnly(
+    e: React.MouseEvent,
+    notificationId: string,
+  ) {
+    e.stopPropagation();
+    setMarkingRead(notificationId);
+    await markRead(notificationId);
+    setMarkingRead(null);
   }
 
   return (
@@ -166,16 +190,17 @@ export function NotificationsClient({
       ) : (
         <div className="space-y-2">
           {notifications.map((n) => {
-            const isUnread = !n.read_at;
+            const isUnread = !n.is_read;
             return (
               <Card
                 key={n.id}
                 className={cn(
-                  "transition-colors",
+                  "transition-colors cursor-pointer hover:bg-muted/50",
                   isUnread
                     ? "border-primary/30 bg-primary/5 dark:bg-primary/5"
                     : "opacity-75",
                 )}
+                onClick={() => handleClick(n)}
               >
                 <CardContent className="py-4">
                   <div className="flex items-start justify-between gap-4">
@@ -192,7 +217,7 @@ export function NotificationsClient({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm truncate">
-                            {n.dataset_title}
+                            {notificationTitle(n.type, n.dataset_title)}
                           </span>
                           {notificationTypeBadge(n.type)}
                           {isUnread && (
@@ -200,29 +225,29 @@ export function NotificationsClient({
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {notificationTypeLabel(n.type)} &middot;{" "}
-                          {timeAgo(n.created_at)}
+                          {notificationSubtitle(n.type)}
+                          {n.type === "dataset_published" && (
+                            <>
+                              {" "}
+                              &middot;{" "}
+                              <span className="font-medium">
+                                {n.dataset_title}
+                              </span>
+                            </>
+                          )}
+                          {" "}&middot; {timeAgo(n.created_at)}
                         </p>
                       </div>
                     </div>
 
-                    {/* Right: actions */}
+                    {/* Right: mark-read button */}
                     <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        asChild
-                      >
-                        <Link href={`/datasets/${n.dataset_id}`}>
-                          View
-                        </Link>
-                      </Button>
                       {isUnread && (
                         <Button
                           variant="ghost"
                           size="sm"
                           disabled={markingRead === n.id}
-                          onClick={() => handleMarkRead(n.id)}
+                          onClick={(e) => handleMarkReadOnly(e, n.id)}
                           title="Mark as read"
                         >
                           {markingRead === n.id ? (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
@@ -40,6 +40,20 @@ interface DashboardClientProps {
 
 export function DashboardClient({ children, session }: DashboardClientProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/me/notifications?unread=true")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.count != null) {
+          setUnreadCount(data.count)
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   // Role is on the session — no plaintext email needed
   const isAdmin = checkAdmin(session.user)
@@ -79,17 +93,28 @@ export function DashboardClient({ children, session }: DashboardClientProps) {
 
         <nav className="mt-6 px-3">
           <div className="space-y-1">
-            {sidebarItems.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <item.icon className="mr-3 h-5 w-5" />
-                {item.name}
-              </Link>
-            ))}
+            {sidebarItems.map((item) => {
+              const showBadge =
+                item.name === "Notifications" && unreadCount > 0
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="relative mr-3">
+                    <item.icon className="h-5 w-5" />
+                    {showBadge && (
+                      <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
+                  </span>
+                  {item.name}
+                </Link>
+              )
+            })}
           </div>
         </nav>
       </div>
