@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { config } from "@/lib/config";
 
 // ---------------------------------------------------------------------------
@@ -696,6 +696,27 @@ export async function insertAuditLog(
 // ---------------------------------------------------------------------------
 // Notifications — idempotent insert, no joins, no payload
 // ---------------------------------------------------------------------------
+
+/**
+ * Insert a 'dataset_published' notification for every user in the institute.
+ *
+ * MUST be called inside an existing transaction — uses the provided client.
+ * ON CONFLICT DO NOTHING ensures idempotency if re-run.
+ */
+export async function createDatasetPublishedNotifications(
+  datasetId: string,
+  instituteId: string,
+  client: PoolClient,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO notifications (user_id, dataset_id, type)
+     SELECT id, $1, 'dataset_published'
+     FROM users
+     WHERE institute_id = $2
+     ON CONFLICT (user_id, dataset_id, type) DO NOTHING`,
+    [datasetId, instituteId],
+  );
+}
 
 /** Allowed notification types. */
 export type NotificationType = "new" | "update" | "action_required";
