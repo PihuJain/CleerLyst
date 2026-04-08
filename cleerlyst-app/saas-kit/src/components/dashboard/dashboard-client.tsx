@@ -15,19 +15,21 @@ import {
   X,
   Zap,
   Bell,
+  LayoutList,
 } from "lucide-react"
 
 // Regular user navigation items
 const regularUserItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Results", href: "/dashboard/feed", icon: LayoutList },
   { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
   { name: "Profile", href: "/dashboard/profile", icon: User },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
-// Admin user navigation items (includes everything)
 const adminUserItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Results", href: "/dashboard/feed", icon: LayoutList },
   { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
   { name: "Profile", href: "/dashboard/profile", icon: User },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
