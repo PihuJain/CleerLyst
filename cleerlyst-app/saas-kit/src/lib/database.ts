@@ -394,6 +394,7 @@ export interface PublishDatasetResult {
  *   • Dataset must be in 'draft' status — throws if already published or revoked.
  *   • Sets status = 'published' and published_at = NOW().
  *   • Inserts an immutable audit log entry (action only, never payload).
+ *   • Inserts 'dataset_published' notifications for all institute users.
  *   • Returns only { id, title, published_at } — no internal fields.
  *
  * SECURITY INVARIANTS:
@@ -405,6 +406,7 @@ export interface PublishDatasetResult {
 export async function publishDataset(
   datasetId: string,
   actorUserId: string,
+  instituteId: string,
 ): Promise<PublishDatasetResult> {
   const client = await pool.connect();
   try {
@@ -452,6 +454,10 @@ export async function publishDataset(
        VALUES ($1, 'dataset.publish', $2, '{}'::jsonb)`,
       [actorUserId, datasetId],
     );
+
+    // ----- 4. Notify all institute users (inside same transaction) -----
+
+    await createDatasetPublishedNotifications(datasetId, instituteId, client);
 
     await client.query("COMMIT");
 

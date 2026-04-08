@@ -118,7 +118,7 @@ export async function POST(
 
       let result: { id: string; title: string; published_at: Date };
       try {
-        result = await publishDataset(datasetId, adminUserId);
+        result = await publishDataset(datasetId, adminUserId, dataset.institute_id);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Publish failed";
         logError("dataset.publish.error", { datasetId, message });
