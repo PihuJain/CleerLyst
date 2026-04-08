@@ -182,11 +182,13 @@ The platform can expand into:
 ## 11. Repository Structure
 
 ```
-/
-├── src/           # Application source
-├── public/        # Static assets
-├── migrations/    # Database migrations
-├── scripts/       # Migration and bootstrap scripts
+cleerlyst/
+├── src/               → Application source code
+├── migrations/        → SQL schema evolution files
+├── scripts/           → Migration runner & bootstrap tools
+├── public/            → Static assets
+├── ARCHITECTURE.md    → System design & security model
+├── CONTRIBUTING.md    → Commit convention & dev guidelines
 ├── package.json
 ├── next.config.ts
 ├── tsconfig.json
@@ -194,8 +196,10 @@ The platform can expand into:
 └── README.md
 ```
 
+Each major folder contains its own `README.md` with detailed documentation.
+
 ---
 
 ## 12. License
 
-MIT. See `LICENSE` in the repository root.
+Private. All rights reserved.
