@@ -146,7 +146,7 @@ export function NotificationsClient({
     if (!n.is_read) {
       await markRead(n.id);
     }
-    router.push(`/datasets/${n.dataset_id}`);
+    router.push(`/dashboard/feed?highlight=${n.dataset_id}`);
   }
 
   async function handleMarkReadOnly(

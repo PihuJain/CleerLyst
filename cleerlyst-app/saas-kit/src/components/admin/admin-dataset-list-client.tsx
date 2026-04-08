@@ -215,7 +215,10 @@ export function AdminDatasetListClient({
           title: createForm.title,
           type: createForm.type,
           description: createForm.description || undefined,
-          identifier_type: createForm.identifier_type,
+          identifier_type:
+            createForm.audience_type === "public"
+              ? null
+              : createForm.identifier_type || "email",
           audience_type: createForm.audience_type,
           expires_at: createForm.expires_at || undefined,
         }),
@@ -505,24 +508,6 @@ export function AdminDatasetListClient({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="ds-ident">Identifier Type</Label>
-              <Select
-                value={createForm.identifier_type}
-                onValueChange={(v) =>
-                  setCreateForm((f) => ({ ...f, identifier_type: v }))
-                }
-              >
-                <SelectTrigger id="ds-ident">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="reg_no">Registration Number</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="space-y-3">
               <Label>Audience</Label>
               <div className="space-y-2">
@@ -536,6 +521,7 @@ export function AdminDatasetListClient({
                       setCreateForm((f) => ({
                         ...f,
                         audience_type: "restricted",
+                        identifier_type: f.identifier_type || "email",
                       }))
                     }
                     className="mt-0.5"
@@ -557,6 +543,7 @@ export function AdminDatasetListClient({
                       setCreateForm((f) => ({
                         ...f,
                         audience_type: "public",
+                        identifier_type: "",
                       }))
                     }
                     className="mt-0.5"
@@ -564,12 +551,33 @@ export function AdminDatasetListClient({
                   <div>
                     <span className="text-sm font-medium">Public</span>
                     <p className="text-xs text-muted-foreground">
-                      Visible to all students in your institute
+                      Visible to all students in your institute.
+                      Single row only, no identifier needed.
                     </p>
                   </div>
                 </label>
               </div>
             </div>
+
+            {createForm.audience_type === "restricted" && (
+              <div className="space-y-2">
+                <Label htmlFor="ds-ident">Identifier Type</Label>
+                <Select
+                  value={createForm.identifier_type || "email"}
+                  onValueChange={(v) =>
+                    setCreateForm((f) => ({ ...f, identifier_type: v }))
+                  }
+                >
+                  <SelectTrigger id="ds-ident">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="reg_no">Registration Number</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="ds-expires">Expires At (optional)</Label>
