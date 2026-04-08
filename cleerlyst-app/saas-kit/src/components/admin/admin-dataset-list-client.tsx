@@ -46,7 +46,10 @@ import {
   FileSpreadsheet,
   Loader2,
   Eye,
+  Copy,
+  CheckCheck,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -128,6 +131,7 @@ export function AdminDatasetListClient({
   const [datasets, setDatasets] = React.useState(initialDatasets);
   const [actionLoading, setActionLoading] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [publishedBanner, setPublishedBanner] = React.useState<string | null>(null);
 
   // Create dialog state
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -140,11 +144,27 @@ export function AdminDatasetListClient({
     expires_at: "",
   });
 
+  function getVerificationUrl(datasetId: string) {
+    const base =
+      process.env.NEXT_PUBLIC_SITE_URL ?? "https://cleerlyst.vercel.app";
+    return `${base}/datasets/${datasetId}`;
+  }
+
+  async function copyVerificationLink(datasetId: string) {
+    try {
+      await navigator.clipboard.writeText(getVerificationUrl(datasetId));
+      toast.success("Verification link copied.");
+    } catch {
+      toast.error("Failed to copy link.");
+    }
+  }
+
   // ---- Actions ----
 
   async function handlePublish(datasetId: string) {
     setActionLoading(datasetId);
     setError(null);
+    setPublishedBanner(null);
     try {
       const res = await fetch(`/api/admin/datasets/${datasetId}/publish`, {
         method: "POST",
@@ -154,7 +174,6 @@ export function AdminDatasetListClient({
         setError(data.error || "Publish failed");
         return;
       }
-      // Update local state
       setDatasets((prev) =>
         prev.map((d) =>
           d.id === datasetId
@@ -166,6 +185,7 @@ export function AdminDatasetListClient({
             : d,
         ),
       );
+      setPublishedBanner(datasetId);
     } catch {
       setError("Network error — could not publish dataset");
     } finally {
@@ -254,6 +274,31 @@ export function AdminDatasetListClient({
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-4">
           <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* Publish success banner */}
+      {publishedBanner && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-900 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-emerald-800 dark:text-emerald-400">
+                Dataset published successfully.
+              </p>
+              <p className="text-sm text-emerald-700 dark:text-emerald-500 mt-0.5">
+                Share this verification link with students.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 border-emerald-300 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+              onClick={() => copyVerificationLink(publishedBanner)}
+            >
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Copy Verification Link
+            </Button>
+          </div>
         </div>
       )}
 
@@ -367,21 +412,31 @@ export function AdminDatasetListClient({
                           </Button>
                         )}
 
-                        {/* Revoke button */}
+                        {/* Copy Link + Revoke — published datasets */}
                         {d.status === "published" && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={actionLoading === d.id}
-                            onClick={() => handleRevoke(d.id)}
-                          >
-                            {actionLoading === d.id ? (
-                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                            )}
-                            Revoke
-                          </Button>
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => copyVerificationLink(d.id)}
+                            >
+                              <Copy className="mr-1.5 h-3.5 w-3.5" />
+                              Copy Link
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={actionLoading === d.id}
+                              onClick={() => handleRevoke(d.id)}
+                            >
+                              {actionLoading === d.id ? (
+                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                              )}
+                              Revoke
+                            </Button>
+                          </>
                         )}
 
                         {/* Revoked — no actions */}
