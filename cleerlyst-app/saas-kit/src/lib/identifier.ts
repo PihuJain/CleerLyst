@@ -1,3 +1,7 @@
+// CRITICAL: This is the ONLY canonical hashing pipeline.
+// Do NOT duplicate hashing logic elsewhere.
+// All identifiers MUST be normalized to uppercase before hashing.
+
 import { createHash } from "crypto";
 
 // ---------------------------------------------------------------------------
