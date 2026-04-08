@@ -60,6 +60,7 @@ interface DatasetRow {
   title: string;
   type: string;
   status: string;
+  audience_type: "restricted" | "public";
   has_headers: boolean;
   has_visibility: boolean;
   created_at: string;
@@ -140,6 +141,7 @@ export function AdminDatasetListClient({
     type: "placement",
     description: "",
     identifier_type: "email",
+    audience_type: "restricted" as "restricted" | "public",
     expires_at: "",
   });
 
@@ -214,6 +216,7 @@ export function AdminDatasetListClient({
           type: createForm.type,
           description: createForm.description || undefined,
           identifier_type: createForm.identifier_type,
+          audience_type: createForm.audience_type,
           expires_at: createForm.expires_at || undefined,
         }),
       });
@@ -228,6 +231,7 @@ export function AdminDatasetListClient({
         type: "placement",
         description: "",
         identifier_type: "email",
+        audience_type: "restricted",
         expires_at: "",
       });
       // Refresh the page to get the new dataset
@@ -517,6 +521,54 @@ export function AdminDatasetListClient({
                   <SelectItem value="reg_no">Registration Number</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-3">
+              <Label>Audience</Label>
+              <div className="space-y-2">
+                <label className="flex items-start gap-3 cursor-pointer rounded-md border p-3 hover:bg-muted/50 transition-colors">
+                  <input
+                    type="radio"
+                    name="audience_type"
+                    value="restricted"
+                    checked={createForm.audience_type === "restricted"}
+                    onChange={() =>
+                      setCreateForm((f) => ({
+                        ...f,
+                        audience_type: "restricted",
+                      }))
+                    }
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <span className="text-sm font-medium">Restricted</span>
+                    <p className="text-xs text-muted-foreground">
+                      Only matched students can view their record
+                    </p>
+                  </div>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer rounded-md border p-3 hover:bg-muted/50 transition-colors">
+                  <input
+                    type="radio"
+                    name="audience_type"
+                    value="public"
+                    checked={createForm.audience_type === "public"}
+                    onChange={() =>
+                      setCreateForm((f) => ({
+                        ...f,
+                        audience_type: "public",
+                      }))
+                    }
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <span className="text-sm font-medium">Public</span>
+                    <p className="text-xs text-muted-foreground">
+                      Visible to all students in your institute
+                    </p>
+                  </div>
+                </label>
+              </div>
             </div>
 
             <div className="space-y-2">

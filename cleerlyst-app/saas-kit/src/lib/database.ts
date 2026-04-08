@@ -278,6 +278,7 @@ export interface Dataset {
   title: string;
   description: string | null;
   identifier_type: string;
+  audience_type: "restricted" | "public";
   visibility_config: Record<string, unknown>;
   headers: string[];
   expires_at: Date | null;
@@ -297,8 +298,8 @@ export async function getDatasetById(
   try {
     const result = await client.query<Dataset>(
       `SELECT id, institute_id, created_by, type, title, description,
-              identifier_type, visibility_config, headers, expires_at,
-              status, created_at, published_at
+              identifier_type, audience_type, visibility_config, headers,
+              expires_at, status, created_at, published_at
          FROM datasets
         WHERE id = $1`,
       [datasetId],
@@ -882,6 +883,7 @@ export interface AdminDatasetMeta {
   title: string;
   type: string;
   status: string;
+  audience_type: "restricted" | "public";
   has_headers: boolean;
   has_visibility: boolean;
   created_at: Date;
@@ -906,7 +908,7 @@ export async function getAdminDatasetsForInstitute(
   const client = await pool.connect();
   try {
     const result = await client.query<AdminDatasetMeta>(
-      `SELECT id, title, type, status, created_at, published_at,
+      `SELECT id, title, type, status, audience_type, created_at, published_at,
               jsonb_array_length(COALESCE(headers, '[]'::jsonb)) > 0 AS has_headers,
               jsonb_array_length(COALESCE(visibility_config->'allowed_fields', '[]'::jsonb)) > 0 AS has_visibility
          FROM datasets
@@ -934,6 +936,7 @@ export interface CreateDatasetInput {
   type: string;
   description: string | null;
   identifierType: string;
+  audienceType: "restricted" | "public";
   expiresAt: Date | null;
 }
 
@@ -967,8 +970,8 @@ export async function createDataset(
     const result = await client.query<CreateDatasetResult>(
       `INSERT INTO datasets
          (institute_id, created_by, type, title, description,
-          identifier_type, status, visibility_config)
-       VALUES ($1, $2, $3, $4, $5, $6, 'draft', '{}'::jsonb)
+          identifier_type, audience_type, status, visibility_config)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', '{}'::jsonb)
        RETURNING id, title, status, created_at`,
       [
         input.instituteId,
@@ -977,6 +980,7 @@ export async function createDataset(
         input.title,
         input.description,
         input.identifierType,
+        input.audienceType,
       ],
     );
 
