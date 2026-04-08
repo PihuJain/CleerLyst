@@ -156,8 +156,12 @@ export async function GET(
       if (dataset.audience_type === "public") {
         encryptedBuffer = await findFirstRecordForDataset(datasetId);
       } else {
-        // Collect the logged-in user's identifier hashes.
-        // These come ONLY from the server-side DB — never from the request.
+        // DB constraint guarantees restricted datasets always have identifier_type.
+        if (!dataset.identifier_type) {
+          logError("dataset.me.invariant_violation", { datasetId, detail: "restricted dataset missing identifier_type" });
+          return DATASET_NOT_FOUND;
+        }
+
         const hashes: string[] = [];
 
         if (dataset.identifier_type === "email") {
