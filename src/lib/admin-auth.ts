@@ -37,7 +37,7 @@ export async function requireAdminAccess(): Promise<SessionUser> {
   }
 
   if (!isAdmin(session.user)) {
-    redirect("/dashboard?error=unauthorized");
+    redirect("/dashboard/feed");
   }
 
   return session.user;
@@ -54,7 +54,7 @@ export async function requireAdminPermission(permission: AdminPermission): Promi
   }
 
   if (!hasAdminPermission(session.user, permission)) {
-    redirect("/dashboard?error=insufficient_permissions");
+    redirect("/dashboard/feed");
   }
 
   return session.user;

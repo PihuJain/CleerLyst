@@ -57,7 +57,7 @@ export function Navbar({ session }: NavbarProps) {
 
           {session ? (
             <Link
-              href="/dashboard"
+              href="/dashboard/feed"
               className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-500 hover:shadow-md transition-all duration-300"
             >
               Dashboard
@@ -100,7 +100,7 @@ export function Navbar({ session }: NavbarProps) {
         <div className="pt-3 border-t border-border mt-2">
           {session ? (
             <Link
-              href="/dashboard"
+              href="/dashboard/feed"
               className="inline-flex items-center justify-center w-full rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white"
             >
               Dashboard
