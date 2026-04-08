@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { isAdminEmail } from "@/lib/admin-config";
+import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
 export const runtime = 'nodejs';
@@ -14,8 +14,8 @@ export default async function DashboardPage() {
   const session = await auth();
   const user = session?.user;
 
-  // Check if user is admin
-  const isAdmin = isAdminEmail(user?.email);
+  // Role is stored in the DB — no plaintext email check
+  const isAdmin = user?.role === "admin";
 
   // Regular user stats
   const regularUserStats = [
@@ -126,8 +126,10 @@ export default async function DashboardPage() {
                 <span className="text-sm font-medium">{user?.name || "Not set"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm">Email</span>
-                <span className="text-sm font-medium">{user?.email || "Not set"}</span>
+                <span className="text-sm">Role</span>
+                <Badge variant={isAdmin ? "default" : "secondary"}>
+                  {user?.role === "admin" ? "Admin" : "Student"}
+                </Badge>
               </div>
             </div>
           </CardContent>

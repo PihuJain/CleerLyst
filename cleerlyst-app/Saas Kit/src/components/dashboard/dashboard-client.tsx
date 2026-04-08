@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { UserButtonClient } from "@/components/auth/user-button-client"
-import { isAdminEmail } from "@/lib/admin-config"
+import { isAdmin as checkAdmin } from "@/lib/admin-config"
 import { cn } from "@/lib/utils"
 import {
   Home,
@@ -13,12 +13,14 @@ import {
   User,
   Menu,
   X,
-  Zap
+  Zap,
+  Bell,
 } from "lucide-react"
 
 // Regular user navigation items
 const regularUserItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
   { name: "Profile", href: "/dashboard/profile", icon: User },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
@@ -26,6 +28,7 @@ const regularUserItems = [
 // Admin user navigation items (includes everything)
 const adminUserItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
   { name: "Profile", href: "/dashboard/profile", icon: User },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
@@ -38,8 +41,8 @@ interface DashboardClientProps {
 export function DashboardClient({ children, session }: DashboardClientProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  // Determine if user is admin and get appropriate navigation items
-  const isAdmin = isAdminEmail(session.user.email)
+  // Role is on the session — no plaintext email needed
+  const isAdmin = checkAdmin(session.user)
   const sidebarItems = isAdmin ? adminUserItems : regularUserItems
 
   return (
