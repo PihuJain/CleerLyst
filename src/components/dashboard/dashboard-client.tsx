@@ -1,71 +1,45 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { UserButtonClient } from "@/components/auth/user-button-client"
 import { isAdmin as checkAdmin } from "@/lib/admin-config"
 import { cn } from "@/lib/utils"
 import {
-  Home,
-  Settings,
   User,
   Menu,
   X,
   Zap,
-  Bell,
   LayoutList,
+  Shield,
 } from "lucide-react"
 
-// Regular user navigation items
-const regularUserItems = [
-  { name: "Dashboard", href: "/dashboard", icon: Home },
+const userItems = [
   { name: "Results", href: "/dashboard/feed", icon: LayoutList },
-  { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
   { name: "Profile", href: "/dashboard/profile", icon: User },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-]
-
-const adminUserItems = [
-  { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Results", href: "/dashboard/feed", icon: LayoutList },
-  { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
-  { name: "Profile", href: "/dashboard/profile", icon: User },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
 interface DashboardClientProps {
   children: React.ReactNode
-  session: any
+  session: { user?: { name?: string | null; image?: string | null; role?: string } }
 }
 
 export function DashboardClient({ children, session }: DashboardClientProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
+  const pathname = usePathname()
+  const isAdminUser = checkAdmin(session.user)
 
-  useEffect(() => {
-    let cancelled = false
-    fetch("/api/me/notifications?unread=true")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.count != null) {
-          setUnreadCount(data.count)
-        }
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
-
-  // Role is on the session — no plaintext email needed
-  const isAdmin = checkAdmin(session.user)
-  const sidebarItems = isAdmin ? adminUserItems : regularUserItems
+  const sidebarItems = isAdminUser
+    ? [...userItems, { name: "Admin", href: "/admin/datasets", icon: Shield }]
+    : userItems
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -96,23 +70,21 @@ export function DashboardClient({ children, session }: DashboardClientProps) {
         <nav className="mt-6 px-3">
           <div className="space-y-1">
             {sidebarItems.map((item) => {
-              const showBadge =
-                item.name === "Notifications" && unreadCount > 0
+              const isActive =
+                pathname === item.href || pathname.startsWith(item.href + "/")
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  className={cn(
+                    "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
                   onClick={() => setSidebarOpen(false)}
                 >
-                  <span className="relative mr-3">
-                    <item.icon className="h-5 w-5" />
-                    {showBadge && (
-                      <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
-                        {unreadCount > 99 ? "99+" : unreadCount}
-                      </span>
-                    )}
-                  </span>
+                  <item.icon className="mr-3 h-5 w-5" />
                   {item.name}
                 </Link>
               )
@@ -123,7 +95,6 @@ export function DashboardClient({ children, session }: DashboardClientProps) {
 
       {/* Main content */}
       <div className="lg:pl-64">
-        {/* Top navigation */}
         <header className="bg-background border-b border-border">
           <div className="flex items-center justify-between h-16 px-6">
             <div className="flex items-center space-x-4">
@@ -136,7 +107,7 @@ export function DashboardClient({ children, session }: DashboardClientProps) {
                 <Menu className="h-5 w-5" />
               </Button>
               <h1 className="text-xl font-semibold">
-                Welcome back, {session.user?.name?.split(' ')[0] || "User"}!
+                Welcome back, {session.user?.name?.split(" ")[0] || "User"}!
               </h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -146,7 +117,6 @@ export function DashboardClient({ children, session }: DashboardClientProps) {
           </div>
         </header>
 
-        {/* Page content */}
         <main className="p-6">
           {children}
         </main>
