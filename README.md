@@ -126,7 +126,7 @@ Migrations are in `migrations/` and should be applied in order. Use `npm run mig
 
 ## 8. Production Deployment
 
-- Deploy via Vercel: connect the repository, set the root directory to `cleerlyst-app/saas-kit` if applicable, and configure environment variables.
+- Deploy via Vercel: connect the repository, set the root directory to `/`, and configure environment variables.
 - Requires production `DATABASE_URL` and `DATASET_ENCRYPTION_KEY`.
 - Migrations must be applied to the production database before first use.
 - Ensure `NEXTAUTH_URL` and `NEXT_PUBLIC_BASE_URL` match the production domain.
@@ -182,7 +182,7 @@ The platform can expand into:
 ## 11. Repository Structure
 
 ```
-cleerlyst-app/saas-kit/
+/
 ├── src/           # Application source
 ├── public/        # Static assets
 ├── migrations/    # Database migrations
