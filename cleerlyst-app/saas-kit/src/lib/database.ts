@@ -279,6 +279,7 @@ export interface Dataset {
   description: string | null;
   identifier_type: string;
   visibility_config: Record<string, unknown>;
+  headers: string[];
   expires_at: Date | null;
   status: string;
   created_at: Date;
@@ -296,7 +297,7 @@ export async function getDatasetById(
   try {
     const result = await client.query<Dataset>(
       `SELECT id, institute_id, created_by, type, title, description,
-              identifier_type, visibility_config, expires_at,
+              identifier_type, visibility_config, headers, expires_at,
               status, created_at, published_at
          FROM datasets
         WHERE id = $1`,
@@ -595,35 +596,71 @@ export interface RecordInsertRow {
 }
 
 /**
- * Insert dataset records in a single transaction.
+ * Insert dataset records AND persist canonical headers in a single transaction.
  *
- * Each row is an individually-parameterised INSERT — safe from injection.
- * On any failure the entire batch is rolled back; no partial writes.
+ * TRANSACTION SCOPE:
+ *   BEGIN
+ *     INSERT all rows (ON CONFLICT DO NOTHING)
+ *     Verify inserted count matches expected count
+ *     UPDATE datasets.headers (if canonicalHeaders provided)
+ *   COMMIT
+ *
+ * ON CONFLICT:
+ *   Uses DO NOTHING to absorb duplicates gracefully, then compares
+ *   inserted count vs expected. On mismatch → ROLLBACK + throw
+ *   "duplicate_identifiers_in_dataset". This protects against race
+ *   conditions where another upload sneaks in concurrently.
  *
  * Returns the number of rows inserted.
+ *
+ * @throws Error("duplicate_identifiers_in_dataset") if ON CONFLICT fires
  */
 export async function insertRecordsBatch(
   datasetId: string,
   rows: RecordInsertRow[],
+  canonicalHeaders?: string[],
 ): Promise<number> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
+    // ----- Insert rows with conflict detection -----
+
     let inserted = 0;
     for (const row of rows) {
-      await client.query(
+      const result = await client.query(
         `INSERT INTO dataset_records (dataset_id, identifier_hash, encrypted_payload)
-         VALUES ($1, $2, $3)`,
+         VALUES ($1, $2, $3)
+         ON CONFLICT (dataset_id, identifier_hash) DO NOTHING`,
         [datasetId, row.identifierHash, row.encryptedPayload],
       );
-      inserted++;
+      if ((result.rowCount ?? 0) > 0) {
+        inserted++;
+      }
+    }
+
+    // ----- Mismatch detection (race condition safety net) -----
+
+    if (inserted !== rows.length) {
+      await client.query("ROLLBACK");
+      throw new Error("duplicate_identifiers_in_dataset");
+    }
+
+    // ----- Persist canonical headers (inside same transaction) -----
+
+    if (canonicalHeaders) {
+      await client.query(
+        `UPDATE datasets SET headers = $2::jsonb WHERE id = $1`,
+        [datasetId, JSON.stringify(canonicalHeaders)],
+      );
     }
 
     await client.query("COMMIT");
     return inserted;
   } catch (err) {
-    await client.query("ROLLBACK");
+    // Safe to call ROLLBACK even if already rolled back —
+    // Postgres treats ROLLBACK outside a transaction as a no-op warning
+    await client.query("ROLLBACK").catch(() => {});
     throw err;
   } finally {
     client.release();
