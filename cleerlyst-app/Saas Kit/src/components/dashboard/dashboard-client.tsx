@@ -5,27 +5,20 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { UserButtonClient } from "@/components/auth/user-button-client"
-import { CreditsDisplay } from "@/components/credits/credits-display"
 import { isAdminEmail } from "@/lib/admin-config"
 import { cn } from "@/lib/utils"
 import {
   Home,
   Settings,
   User,
-  Users,
-  BarChart3,
-  Zap,
   Menu,
   X,
-  MessageSquare,
-  CreditCard
+  Zap
 } from "lucide-react"
 
 // Regular user navigation items
 const regularUserItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "AI Chat", href: "/dashboard/chat", icon: MessageSquare },
-  { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
   { name: "Profile", href: "/dashboard/profile", icon: User },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
@@ -33,9 +26,6 @@ const regularUserItems = [
 // Admin user navigation items (includes everything)
 const adminUserItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "AI Chat", href: "/dashboard/chat", icon: MessageSquare },
-  { name: "Users", href: "/dashboard/users", icon: Users },
-  { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   { name: "Profile", href: "/dashboard/profile", icon: User },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
@@ -72,7 +62,7 @@ export function DashboardClient({ children, session }: DashboardClientProps) {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
               <Zap className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-lg font-semibold">Best SAAS Kit</span>
+            <span className="text-lg font-semibold">Cleerlyst</span>
           </div>
           <Button
             variant="ghost"
@@ -120,7 +110,6 @@ export function DashboardClient({ children, session }: DashboardClientProps) {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <CreditsDisplay showRefresh />
               <ThemeToggle />
               <UserButtonClient user={session.user} />
             </div>

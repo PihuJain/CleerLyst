@@ -1,7 +1,6 @@
 import Navigation from "@/components/landing/navigation"
 import Hero from "@/components/landing/hero"
 import Features from "@/components/landing/features"
-import Pricing from "@/components/landing/pricing"
 import Testimonials from "@/components/landing/testimonials"
 import Footer from "@/components/landing/footer"
 import { SmoothScroll } from "@/components/ui/smooth-scroll"
@@ -14,7 +13,6 @@ export default function Home() {
       <Navigation />
       <Hero />
       <Features />
-      <Pricing />
       <Testimonials />
       <Footer />
       <ScrollToTop />

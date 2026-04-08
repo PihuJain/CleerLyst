@@ -16,11 +16,7 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 
 // Admin permissions
 export const ADMIN_PERMISSIONS = {
-  VIEW_USERS: 'view_users',
-  DELETE_USERS: 'delete_users',
-  VIEW_ANALYTICS: 'view_analytics',
   MANAGE_SYSTEM: 'manage_system',
-  MANAGE_DISCOUNTS: 'manage_discounts',
 } as const;
 
 export type AdminPermission = typeof ADMIN_PERMISSIONS[keyof typeof ADMIN_PERMISSIONS];
