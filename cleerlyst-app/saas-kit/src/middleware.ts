@@ -20,7 +20,7 @@ import type { NextRequest } from "next/server";
 // ---------------------------------------------------------------------------
 
 export function middleware(request: NextRequest) {
-  const requestId = crypto.randomUUID();
+  const requestId = globalThis.crypto.randomUUID();
 
   // Protected paths that require authentication
   const protectedPaths = ["/dashboard", "/admin"];
