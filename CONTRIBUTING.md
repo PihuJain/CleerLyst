@@ -44,15 +44,15 @@ docs: update architecture diagram for V3
 
 ### What Not to Do
 
-- ❌ Vague messages: `"backend hardening - 6 phases"`
-- ❌ Internal roadmap language: `"phases A-D — result semantics"`
-- ❌ Philosophy: `"tightening and structural completeness"`
+- Vague messages: `"backend hardening - 6 phases"`
+- Internal roadmap language: `"phases A-D, result semantics"`
+- Philosophy: `"tightening and structural completeness"`
 
 Commit messages describe **code changes**, not project plans.
 
 ## Branch Strategy
 
-- `main` — stable, tagged releases only
+- `main`: stable, tagged releases only
 - Feature branches: `v3-admin-control`, `feat/audit-log-viewer`, etc.
 - Merge to `main` when stable, then tag the release
 
@@ -60,5 +60,5 @@ Commit messages describe **code changes**, not project plans.
 
 - All API routes must use `withApiHandler`
 - Never store identifiers in plain text
-- Never modify existing migration files — add new ones
+- Never modify existing migration files, add new ones instead
 - Keep `lib/` modules focused and single-purpose

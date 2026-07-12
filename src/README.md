@@ -4,7 +4,7 @@
 
 ### `app/`
 
-Next.js App Router — pages and API routes.
+Next.js App Router: pages and API routes.
 
 | Directory | Purpose |
 |-----------|---------|

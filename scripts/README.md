@@ -6,7 +6,7 @@ Tooling for initializing and migrating the Cleerlyst database.
 
 ### `bootstrap.ts`
 
-Initializes the database from scratch — creates required extensions, enums, and base schema.
+Initializes the database from scratch: creates required extensions, enums, and base schema.
 
 Used during first-time setup of a new environment.
 

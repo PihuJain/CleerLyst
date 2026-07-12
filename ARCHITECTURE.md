@@ -36,9 +36,9 @@ Cleerlyst is a multi-tenant platform for secure institutional dataset publishing
 
 Each institution is logically isolated via:
 
-- **Institute ID** — all queries are scoped by institute
-- **Per-institute salt** — identifier hashing uses unique salts to prevent cross-institute correlation
-- **Segregated dataset queries** — users from one institute cannot access another's data
+- **Institute ID**: all queries are scoped by institute
+- **Per-institute salt**: identifier hashing uses unique salts to prevent cross-institute correlation
+- **Segregated dataset queries**: users from one institute cannot access another's data
 
 ## Dataset Lifecycle
 
@@ -61,12 +61,12 @@ Draft → [upload records] → [configure visibility] → Published → Revoked
 
 | Layer | Mechanism |
 |-------|-----------|
-| Identity | SHA-256 salted hashing — identifiers never stored in plain text |
-| Data | AES-256-GCM encryption — records encrypted at rest, decrypted only on matched access |
+| Identity | SHA-256 salted hashing, identifiers never stored in plain text |
+| Data | AES-256-GCM encryption, records encrypted at rest and decrypted only on matched access |
 | Access | No bulk listing, no enumeration, no reverse lookup |
 | Isolation | Institute-level data segregation |
 | Audit | Structured logging of publish, revoke, and visibility changes |
-| Errors | Production error masking — 500s never expose internals |
+| Errors | Production error masking, 500s never expose internals |
 
 ## API Layering
 

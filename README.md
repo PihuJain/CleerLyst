@@ -4,6 +4,8 @@ Cleerlyst is a secure institutional platform for publishing academic datasets wi
 
 It replaces public spreadsheets and PDF lists with a private, identity-aware result system designed for universities and academic departments.
 
+Live demo: https://cleerlystpihu.vercel.app
+
 ---
 
 ## 1. Executive Overview
@@ -65,12 +67,12 @@ Universities may operate under:
 
 ## 4. Security Model
 
-- **SHA-256 salted identifier hashing** — Identifiers (e.g., registration numbers) are never stored in plain text. Matching is done via one-way hashes with institute-specific salts.
-- **AES-256-GCM encrypted payload storage** — All sensitive dataset records are encrypted at rest. Decryption occurs only when serving a matched result to the authorised user.
-- **No public exposure of identifiers** — No bulk listing, no enumeration, no reverse lookup.
-- **Institute-level data isolation** — Users from one institute cannot access data from another.
-- **Structured audit logging** — Actions (publish, revoke, visibility changes) are logged for accountability.
-- **Production error masking** — Sensitive error details are never exposed to clients.
+- **SHA-256 salted identifier hashing**: identifiers (e.g., registration numbers) are never stored in plain text. Matching is done via one-way hashes with institute-specific salts.
+- **AES-256-GCM encrypted payload storage**: all sensitive dataset records are encrypted at rest. Decryption only happens when serving a matched result to the authorised user.
+- **No public exposure of identifiers**: no bulk listing, no enumeration, no reverse lookup.
+- **Institute-level data isolation**: users from one institute cannot access data from another.
+- **Structured audit logging**: publish, revoke and visibility changes are all logged for accountability.
+- **Production error masking**: sensitive error details are never exposed to clients.
 
 Cleerlyst does not store raw student identifiers in plain text.
 

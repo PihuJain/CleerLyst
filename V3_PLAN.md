@@ -2,7 +2,7 @@
 
 ## Release Goal
 
-Institutional refinement release — elevate admin controls, polish student experience, and harden stability.
+Institutional refinement release: elevate admin controls, polish the student experience, and harden stability.
 
 ## Primary Focus Areas
 
